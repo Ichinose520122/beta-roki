@@ -1,0 +1,95 @@
+import { normalizeCategorySource } from "../../_lib/categories.js";
+import { adminItem, ensureSchema, writePrivateGallerySnapshot } from "../../_lib/db.js";
+import {
+  apiError,
+  cleanText,
+  json,
+  normalizeTags,
+  requireSameOrigin,
+  validOptionalDateTime,
+  validShotTime,
+} from "../../_lib/http.js";
+
+const EXTENSIONS = Object.freeze({
+  "image/webp": "webp",
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/avif": "avif",
+  "image/gif": "gif",
+});
+
+export async function onRequestPost(context) {
+  const originError = requireSameOrigin(context.request);
+  if (originError) return originError;
+
+  let objectKey = "";
+  try {
+    await ensureSchema(context.env.DB);
+    const form = await context.request.formData();
+    const file = form.get("file");
+    if (!file || typeof file.arrayBuffer !== "function") return apiError("请选择图片");
+
+    const contentType = String(file.type || "").toLowerCase();
+    const extension = EXTENSIONS[contentType];
+    if (!extension) return apiError("仅支持 WebP、JPEG、PNG、AVIF 或 GIF 图片");
+    const maxBytes = Number(context.env.MAX_UPLOAD_BYTES || 25 * 1024 * 1024);
+    if (!file.size || file.size > maxBytes) return apiError("图片为空或超过上传大小限制");
+
+    const category = normalizeCategorySource(cleanText(form.get("category"), 80));
+    const shotAt = validShotTime(form.get("time"));
+    if (!category) return apiError("分类无效");
+    if (!shotAt) return apiError("截图时间格式无效");
+
+    const pinnedEnabled = form.get("pinnedEnabled") === "true";
+    const featuredEnabled = form.get("featuredEnabled") === "true";
+    const pinnedUntil = validOptionalDateTime(form.get("pinnedUntil"));
+    const featuredUntil = validOptionalDateTime(form.get("featuredUntil"));
+    if (pinnedUntil === undefined || featuredUntil === undefined) {
+      return apiError("置顶或加精时间格式无效");
+    }
+
+    const id = crypto.randomUUID();
+    objectKey = `gallery/${id}.${extension}`;
+    await context.env.GALLERY_BUCKET.put(objectKey, await file.arrayBuffer(), {
+      httpMetadata: { contentType },
+      customMetadata: { galleryId: id, managedBy: "gallery-admin" },
+    });
+
+    const now = new Date().toISOString();
+    await context.env.DB.prepare(
+      `INSERT INTO gallery_items (
+        id, object_key, category, title, comment, shot_at, tags_json,
+        content_type, size, is_pinned, pinned_until, is_featured, featured_until,
+        created_at, updated_at
+      ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)`,
+    )
+      .bind(
+        id,
+        objectKey,
+        category,
+        cleanText(form.get("title"), 160),
+        cleanText(form.get("comment"), 2000),
+        shotAt,
+        JSON.stringify(normalizeTags(form.get("tags"))),
+        contentType,
+        file.size,
+        pinnedEnabled ? 1 : 0,
+        pinnedEnabled ? pinnedUntil : null,
+        featuredEnabled ? 1 : 0,
+        featuredEnabled ? featuredUntil : null,
+        now,
+        now,
+      )
+      .run();
+
+    await writePrivateGallerySnapshot(context.env);
+    const row = await context.env.DB.prepare("SELECT * FROM gallery_items WHERE id = ?1")
+      .bind(id)
+      .first();
+    return json({ ok: true, image: adminItem(row) }, { status: 201 });
+  } catch (error) {
+    console.error(error);
+    if (objectKey) await context.env.GALLERY_BUCKET.delete(objectKey).catch(() => {});
+    return apiError("上传失败", 500);
+  }
+}

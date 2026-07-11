@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="一ノ瀬林檎的小洛克冒险之旅" />
+    <meta name="theme-color" content="#0b0d12" />
+    <title>一ノ瀬林檎的小洛克冒险之旅</title>
+    <link rel="stylesheet" href="./style.css" />
+    <script src="./app.js" defer></script>
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <h1>一ノ瀬林檎的小洛克冒险之旅</h1>
+      </div>
+    </header>
+
+    <main class="gallery-app">
+      <section class="gallery-layout" aria-labelledby="gallery-title">
+        <h2 class="sr-only" id="gallery-title">图片分类与列表</h2>
+
+        <aside class="category-sidebar" aria-label="图库分类">
+          <p class="sidebar-label">分类</p>
+          <div
+            class="category-tabs"
+            id="category-tabs"
+            role="tablist"
+            aria-label="截图分类"
+            aria-orientation="vertical"
+          ></div>
+        </aside>
+
+        <div class="gallery-content">
+          <div class="toolbar">
+            <label class="search-field">
+              <span class="sr-only">搜索图片</span>
+              <input
+                id="search-input"
+                type="search"
+                placeholder="搜索标签或日期"
+                autocomplete="off"
+              />
+            </label>
+
+            <label class="sort-control" for="sort-select">
+              <span>排序</span>
+              <select id="sort-select">
+                <option value="desc" selected>最新优先</option>
+                <option value="asc">最早优先</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="gallery-status" aria-live="polite">
+            <p id="result-summary">正在读取图库…</p>
+            <span id="sort-badge">时间倒序</span>
+          </div>
+
+          <div class="gallery-grid" id="gallery-grid" aria-busy="true">
+            <article class="skeleton-card"><div></div><span></span></article>
+            <article class="skeleton-card"><div></div><span></span></article>
+            <article class="skeleton-card"><div></div><span></span></article>
+          </div>
+
+          <div class="empty-state" id="empty-state" hidden>
+            <h3>没有找到图片</h3>
+            <p>请检查分类或搜索条件。</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <dialog class="lightbox" id="lightbox" aria-labelledby="lightbox-title">
+      <div class="lightbox-shell">
+        <div class="lightbox-topbar">
+          <div>
+            <span id="lightbox-position">1 / 1</span>
+            <strong id="lightbox-title">图片</strong>
+          </div>
+          <div class="lightbox-actions">
+            <a id="open-original" href="#" target="_blank" rel="noopener noreferrer">打开原图</a>
+            <button class="icon-button" id="lightbox-close" type="button" aria-label="关闭">×</button>
+          </div>
+        </div>
+
+        <div class="lightbox-stage" id="lightbox-stage">
+          <button class="nav-button prev" id="lightbox-prev" type="button" aria-label="上一张">‹</button>
+          <figure>
+            <div class="image-loader" id="image-loader" aria-hidden="true"></div>
+            <img id="lightbox-image" src="" alt="" />
+            <figcaption>
+              <div>
+                <p id="lightbox-time"></p>
+                <span id="lightbox-category"></span>
+              </div>
+              <p class="lightbox-comment" id="lightbox-comment"></p>
+            </figcaption>
+          </figure>
+          <button class="nav-button next" id="lightbox-next" type="button" aria-label="下一张">›</button>
+        </div>
+      </div>
+    </dialog>
+
+    <noscript><p class="noscript">请启用 JavaScript 后访问图库。</p></noscript>
+  </body>
+</html>
