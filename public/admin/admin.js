@@ -90,15 +90,23 @@ function populateCategories() {
     if (index === 0) select.replaceChildren(new Option("全部分类", ""));
     else if (select === elements.bulkCategory) select.replaceChildren(new Option("选择目标分组", ""));
     else select.replaceChildren();
-    state.categories.forEach((category) => select.add(new Option(category.name, category.source)));
+    state.categories.forEach((category) => {
+      const value = select === elements.category ? category.id : category.source;
+      select.add(new Option(category.name, value));
+    });
     select.value = current;
   });
+
+  if (state.category && !state.categories.some((category) => category.id === state.category)) {
+    state.category = "";
+    elements.category.value = "";
+  }
 }
 
 function filteredImages() {
   const query = state.query.trim().toLocaleLowerCase("zh-CN");
   return state.images.filter((image) => {
-    if (state.category && image.category !== state.category) return false;
+    if (state.category && !imageMatchesCategory(image, state.category)) return false;
     if (state.filterState === "pinned" && !image.pinned) return false;
     if (state.filterState === "featured" && !image.featured) return false;
     if (!query) return true;
@@ -107,6 +115,13 @@ function filteredImages() {
       .toLocaleLowerCase("zh-CN")
       .includes(query);
   });
+}
+
+function imageMatchesCategory(image, categoryId) {
+  const category = state.categories.find((item) => item.id === categoryId);
+  if (!category) return false;
+  if (image.categoryId) return image.categoryId === category.id;
+  return [category.source, category.name, ...(category.aliases || [])].includes(image.category);
 }
 
 function render() {
