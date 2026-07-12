@@ -28,6 +28,7 @@ export async function onRequestPost(context) {
     const form = await context.request.formData();
     const file = form.get("file");
     if (!file || typeof file.arrayBuffer !== "function") return apiError("请选择图片");
+    const refreshSnapshot = form.get("refreshSnapshot") !== "false";
 
     const contentType = String(file.type || "").toLowerCase();
     const extension = EXTENSIONS[contentType];
@@ -82,7 +83,7 @@ export async function onRequestPost(context) {
       )
       .run();
 
-    await writePrivateGallerySnapshot(context.env);
+    if (refreshSnapshot) await writePrivateGallerySnapshot(context.env);
     const row = await context.env.DB.prepare("SELECT * FROM gallery_items WHERE id = ?1")
       .bind(id)
       .first();

@@ -8,7 +8,10 @@ const state = {
   filterState: "",
   importFile: null,
   selectedIds: new Set(),
+  editOriginal: null,
 };
+
+const UPLOAD_CONCURRENCY = 4;
 
 const elements = {
   summary: document.querySelector("#summary"),
@@ -592,6 +595,7 @@ async function submitUpload(event) {
 
   const originalText = submit.textContent;
   let uploaded = 0;
+  let finished = 0;
   const failures = [];
   const fallbackTime = fromLocalInput(
     elements.uploadForm.elements.time.value,
@@ -619,10 +623,9 @@ async function submitUpload(event) {
       String(elements.uploadForm.elements.featuredEnabled.checked),
     );
 
-    for (let index = 0; index < files.length; index += 1) {
-      const file = files[index];
-
-      submit.textContent = `正在上传 ${index + 1}/${files.length}`;
+    const uploadOne = async (file, index) => {
+      finished += 1;
+      submit.textContent = `正在上传 ${finished}/${files.length}`;
 
       const screenshotTime =
         parseScreenshotTimeFromFilename(file.name)
@@ -633,7 +636,7 @@ async function submitUpload(event) {
           name: file.name,
           message: "无法从文件名读取时间，且未填写备用截图时间",
         });
-        continue;
+        return;
       }
 
       const form = new FormData();
@@ -644,6 +647,7 @@ async function submitUpload(event) {
 
       form.set("file", file, file.name);
       form.set("time", screenshotTime);
+      form.set("refreshSnapshot", "false");
 
       try {
         await request("/api/admin/upload", {
@@ -658,6 +662,17 @@ async function submitUpload(event) {
           message: error.message,
         });
       }
+    };
+
+    await runWithConcurrency(files, UPLOAD_CONCURRENCY, uploadOne);
+
+    if (uploaded > 0) {
+      submit.textContent = "正在刷新图库索引";
+      await request("/api/admin/snapshot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
     }
 
     await loadGallery();
@@ -699,16 +714,28 @@ async function submitUpload(event) {
 
 function openEdit(image) {
   const form = elements.editForm.elements;
+  state.editOriginal = {
+    id: image.id,
+    category: image.category,
+    time: toLocalInput(image.time),
+    title: image.title || "",
+    comment: image.comment || "",
+    tags: (image.tags || []).join(", "),
+    pinnedEnabled: Boolean(image.pinnedEnabled),
+    pinnedUntil: toLocalInput(image.pinnedUntil),
+    featuredEnabled: Boolean(image.featuredEnabled),
+    featuredUntil: toLocalInput(image.featuredUntil),
+  };
   form.id.value = image.id;
-  form.category.value = image.category;
-  form.time.value = toLocalInput(image.time);
-  form.title.value = image.title || "";
-  form.comment.value = image.comment || "";
-  form.tags.value = (image.tags || []).join(", ");
-  form.pinnedEnabled.checked = image.pinnedEnabled;
-  form.pinnedUntil.value = toLocalInput(image.pinnedUntil);
-  form.featuredEnabled.checked = image.featuredEnabled;
-  form.featuredUntil.value = toLocalInput(image.featuredUntil);
+  form.category.value = state.editOriginal.category;
+  form.time.value = state.editOriginal.time;
+  form.title.value = state.editOriginal.title;
+  form.comment.value = state.editOriginal.comment;
+  form.tags.value = state.editOriginal.tags;
+  form.pinnedEnabled.checked = state.editOriginal.pinnedEnabled;
+  form.pinnedUntil.value = state.editOriginal.pinnedUntil;
+  form.featuredEnabled.checked = state.editOriginal.featuredEnabled;
+  form.featuredUntil.value = state.editOriginal.featuredUntil;
   form.pinnedUntil.disabled = !form.pinnedEnabled.checked;
   form.featuredUntil.disabled = !form.featuredEnabled.checked;
   elements.editDialog.showModal();
@@ -719,23 +746,44 @@ async function submitEdit(event) {
   const submit = event.submitter;
   submit.disabled = true;
   const form = elements.editForm.elements;
+  const next = {
+    id: form.id.value,
+    category: form.category.value,
+    time: form.time.value,
+    title: form.title.value,
+    comment: form.comment.value,
+    tags: form.tags.value,
+    pinnedEnabled: form.pinnedEnabled.checked,
+    pinnedUntil: form.pinnedUntil.value,
+    featuredEnabled: form.featuredEnabled.checked,
+    featuredUntil: form.featuredUntil.value,
+  };
+
+  if (state.editOriginal && JSON.stringify(next) === JSON.stringify(state.editOriginal)) {
+    elements.editDialog.close();
+    submit.disabled = false;
+    showToast("没有检测到需要保存的修改");
+    return;
+  }
+
   try {
     await request(`/api/admin/gallery/${encodeURIComponent(form.id.value)}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        category: form.category.value,
-        time: fromLocalInput(form.time.value),
-        title: form.title.value,
-        comment: form.comment.value,
-        tags: form.tags.value,
-        pinnedEnabled: form.pinnedEnabled.checked,
-        pinnedUntil: fromLocalInput(form.pinnedUntil.value),
-        featuredEnabled: form.featuredEnabled.checked,
-        featuredUntil: fromLocalInput(form.featuredUntil.value),
+        category: next.category,
+        time: fromLocalInput(next.time),
+        title: next.title,
+        comment: next.comment,
+        tags: next.tags,
+        pinnedEnabled: next.pinnedEnabled,
+        pinnedUntil: fromLocalInput(next.pinnedUntil),
+        featuredEnabled: next.featuredEnabled,
+        featuredUntil: fromLocalInput(next.featuredUntil),
       }),
     });
     elements.editDialog.close();
+    state.editOriginal = null;
     await loadGallery();
     showToast("修改已同步到图库索引");
   } catch (error) {
@@ -743,6 +791,19 @@ async function submitEdit(event) {
   } finally {
     submit.disabled = false;
   }
+}
+
+async function runWithConcurrency(items, concurrency, worker) {
+  let nextIndex = 0;
+  const limit = Math.max(1, Math.min(concurrency, items.length));
+  const runners = Array.from({ length: limit }, async () => {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      await worker(items[index], index);
+    }
+  });
+  await Promise.all(runners);
 }
 
 async function deleteCurrent() {

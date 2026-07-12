@@ -33,6 +33,7 @@ const elements = {
   lightboxNext: document.querySelector("#lightbox-next"),
   lightboxStage: document.querySelector("#lightbox-stage"),
   openOriginal: document.querySelector("#open-original"),
+  downloadOriginal: document.querySelector("#download-original"),
   imageLoader: document.querySelector("#image-loader"),
 };
 
@@ -355,6 +356,8 @@ function updateLightbox() {
   elements.lightboxComment.textContent = image.comment;
   elements.lightboxComment.hidden = !image.comment;
   elements.openOriginal.href = image.url;
+  elements.downloadOriginal.href = `${image.url}?download=1`;
+  elements.downloadOriginal.download = `${image.time.replace(/[: ]/g, "-")}-${image.id}`;
   elements.lightboxPrev.disabled = state.lightboxIndex === 0;
   elements.lightboxNext.disabled = state.lightboxIndex === state.visibleImages.length - 1;
   elements.lightboxImage.alt = image.title || `${image.categoryName}大图`;

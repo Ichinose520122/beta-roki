@@ -7,7 +7,7 @@ export async function onRequestGet(context) {
     if (!/^[a-zA-Z0-9-]{12,64}$/.test(id)) return new Response("Not found", { status: 404 });
 
     const row = await context.env.DB.prepare(
-      "SELECT object_key, content_type FROM gallery_items WHERE id = ?1",
+      "SELECT object_key, content_type, shot_at, title FROM gallery_items WHERE id = ?1",
     )
       .bind(id)
       .first();
@@ -26,6 +26,11 @@ export async function onRequestGet(context) {
     headers.set("Content-Type", headers.get("Content-Type") || row.content_type || "image/webp");
     headers.set("Cache-Control", "public, max-age=31536000, immutable");
     headers.set("X-Content-Type-Options", "nosniff");
+    if (new URL(context.request.url).searchParams.get("download") === "1") {
+      const extension = String(row.object_key || "").split(".").pop() || "image";
+      const filename = `${String(row.shot_at || id).replace(/[: ]/g, "-")}-${id}.${extension}`;
+      headers.set("Content-Disposition", `attachment; filename="${filename}"`);
+    }
     if (etag) headers.set("ETag", etag);
     return new Response(object.body, { headers });
   } catch (error) {
