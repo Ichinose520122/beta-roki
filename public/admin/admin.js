@@ -264,6 +264,36 @@ function bindControls() {
 
   setupScheduleControls(elements.uploadForm);
   setupScheduleControls(elements.editForm);
+  elements.uploadForm.elements.file.addEventListener("change", (event) => {
+  const files = [...event.target.files];
+
+  if (!files.length) return;
+
+  const parsedTime = parseScreenshotTimeFromFilename(files[0].name);
+
+  if (!parsedTime) {
+    showToast(
+      `无法从“${files[0].name}”读取时间，将使用手动填写的截图时间`,
+      true,
+    );
+    return;
+  }
+
+  /*
+   * datetime-local 需要：
+   * 2026-07-12T00:27:17
+   */
+  elements.uploadForm.elements.time.value =
+    parsedTime.replace(" ", "T");
+
+  if (files.length === 1) {
+    showToast(`已读取截图时间：${parsedTime}`);
+  } else {
+    showToast(
+      `已选择 ${files.length} 张图片，每张图片将分别读取文件名时间`,
+    );
+  }
+});
   elements.uploadForm.addEventListener("submit", submitUpload);
   elements.editForm.addEventListener("submit", submitEdit);
   elements.deleteButton.addEventListener("click", deleteCurrent);
@@ -514,26 +544,156 @@ function setupScheduleControls(form) {
   });
 }
 
+function parseScreenshotTimeFromFilename(filename) {
+  const match = String(filename).match(
+    /^(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})(?:[_.-]|$)/,
+  );
+
+  if (!match) return null;
+
+  const [, year, month, day, hour, minute, second] = match;
+
+  const date = new Date(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour),
+    Number(minute),
+    Number(second),
+  );
+
+  if (
+    date.getFullYear() !== Number(year)
+    || date.getMonth() !== Number(month) - 1
+    || date.getDate() !== Number(day)
+    || date.getHours() !== Number(hour)
+    || date.getMinutes() !== Number(minute)
+    || date.getSeconds() !== Number(second)
+  ) {
+    return null;
+  }
+
+  return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
+}
+
 async function submitUpload(event) {
   event.preventDefault();
+
   const submit = event.submitter;
+  const fileInput = elements.uploadForm.elements.file;
+  const files = [...fileInput.files];
+
+  if (!files.length) {
+    showToast("请选择至少一张图片", true);
+    return;
+  }
+
   submit.disabled = true;
+
+  const originalText = submit.textContent;
+  let uploaded = 0;
+  const failures = [];
+  const fallbackTime = fromLocalInput(
+    elements.uploadForm.elements.time.value,
+  );
+
   try {
-    const form = new FormData(elements.uploadForm);
-    normalizeFormDates(form);
-    form.set("pinnedEnabled", String(elements.uploadForm.elements.pinnedEnabled.checked));
-    form.set("featuredEnabled", String(elements.uploadForm.elements.featuredEnabled.checked));
-    await request("/api/admin/upload", { method: "POST", body: form });
-    elements.uploadDialog.close();
-    elements.uploadForm.reset();
-    setupFormAfterReset(elements.uploadForm);
-    setDefaultUploadTime();
+    /*
+     * 获取所有图片共用的字段。
+     * file 和 time 会在循环中为每张图片单独设置。
+     */
+    const baseForm = new FormData(elements.uploadForm);
+
+    baseForm.delete("file");
+    baseForm.delete("time");
+
+    normalizeFormDates(baseForm);
+
+    baseForm.set(
+      "pinnedEnabled",
+      String(elements.uploadForm.elements.pinnedEnabled.checked),
+    );
+
+    baseForm.set(
+      "featuredEnabled",
+      String(elements.uploadForm.elements.featuredEnabled.checked),
+    );
+
+    for (let index = 0; index < files.length; index += 1) {
+      const file = files[index];
+
+      submit.textContent = `正在上传 ${index + 1}/${files.length}`;
+
+      const screenshotTime =
+        parseScreenshotTimeFromFilename(file.name)
+        || fallbackTime;
+
+      if (!screenshotTime) {
+        failures.push({
+          name: file.name,
+          message: "无法从文件名读取时间，且未填写备用截图时间",
+        });
+        continue;
+      }
+
+      const form = new FormData();
+
+      for (const [name, value] of baseForm.entries()) {
+        form.append(name, value);
+      }
+
+      form.set("file", file, file.name);
+      form.set("time", screenshotTime);
+
+      try {
+        await request("/api/admin/upload", {
+          method: "POST",
+          body: form,
+        });
+
+        uploaded += 1;
+      } catch (error) {
+        failures.push({
+          name: file.name,
+          message: error.message,
+        });
+      }
+    }
+
     await loadGallery();
-    showToast("图片已上传，R2 和私有 gallery 索引已同步");
+
+    if (!failures.length) {
+      elements.uploadDialog.close();
+      elements.uploadForm.reset();
+      setupFormAfterReset(elements.uploadForm);
+      setDefaultUploadTime();
+
+      showToast(
+        `已上传 ${uploaded} 张图片，截图时间已从文件名读取`,
+      );
+
+      return;
+    }
+
+    const failureDetails = failures
+      .slice(0, 3)
+      .map((failure) => `${failure.name}：${failure.message}`)
+      .join("；");
+
+    const remaining =
+      failures.length > 3
+        ? `；另有 ${failures.length - 3} 张失败`
+        : "";
+
+    showToast(
+      `成功 ${uploaded} 张，失败 ${failures.length} 张。${failureDetails}${remaining}`,
+      true,
+    );
   } catch (error) {
     showToast(error.message, true);
   } finally {
     submit.disabled = false;
+    submit.textContent = originalText;
   }
 }
 
