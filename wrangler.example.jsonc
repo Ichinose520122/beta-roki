@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ringo-rock-gallery",
+  "compatibility_date": "2026-07-12",
+  "pages_build_output_dir": "./public",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "ringo-rock-gallery",
+      "database_id": "在这里填写 D1 database_id"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "GALLERY_BUCKET",
+      "bucket_name": "在本地私密配置中填写真实 R2 桶名"
+    }
+  ],
+  "vars": {
+    "CF_ACCESS_TEAM_DOMAIN": "https://你的团队名.cloudflareaccess.com",
+    "CF_ACCESS_AUD": "填写 Access Application AUD",
+    "ADMIN_EMAIL": "填写允许管理图库的邮箱",
+    "MAX_UPLOAD_BYTES": "26214400"
+  }
+}
