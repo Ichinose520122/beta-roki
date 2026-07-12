@@ -1,16 +1,6 @@
 # 一ノ瀬林檎的小洛克冒险之旅
 
-Cloudflare Pages + Pages Functions + D1 + R2 图库系统。
-
-公开图库只返回稳定的图片 ID 和 `/gallery/{id}` 访问地址，不向前端暴露 R2 对象键、桶名或原始文件名。
-
-## 本版本修复
-
-- 多图片上传改为浏览器固定并发上传，提升批量上传速度。
-- 批量上传时单张上传不刷新私有快照，全部完成后只调用一次 `/api/admin/snapshot`。
-- 编辑表单只在点击保存且内容发生变化时发送 PATCH，减少无效数据库写入。
-- 公开原图支持 `?download=1` 附件下载，前台灯箱增加下载入口。
-- 后台私有 gallery 导出文件名加入日期，方便多次备份区分。
+Cloudflare Pages + Pages Functions + D1 + R2 图库。
 
 ## 项目结构
 
@@ -18,14 +8,22 @@ Cloudflare Pages + Pages Functions + D1 + R2 图库系统。
 public/                 公开网页
   admin/                管理后台界面
 functions/              Pages Functions 后端
-  api/gallery.js        公开图库数据
+  api/gallery.js        公开图库数据，只返回 gallery ID
   gallery/[id].js       按 ID 输出图片，不暴露 R2 路径
   api/admin/            后台管理接口
 migrations/             D1 数据库结构
-seed/                   可选本地导入数据，不应提交
+seed/gallery.json       原有 715 张图片的一次性导入索引，不会公开部署
 ```
 
 `seed/` 已加入 `.gitignore`，不要把它提交到公开仓库。
+
+后台会维护三部分数据：
+
+- R2：保存图片文件。
+- D1：保存分类、截图时间、标题、评论、标签、置顶和加精信息。
+- D1 私有快照：每次修改后自动生成完整 `gallery.json`，可在后台下载。
+
+公开网页不会收到桶名、R2 对象键或原始文件名，只会收到 `/gallery/{ID}`。
 
 ## 首次配置
 
@@ -37,62 +35,65 @@ npx wrangler d1 execute ringo-rock-gallery --remote --file=./migrations/0001_gal
 npx wrangler d1 execute ringo-rock-gallery --remote --file=./migrations/0002_categories.sql
 ```
 
-已部署过旧版本时，Functions 首次访问会自动创建分组表、写入默认分组，并把旧中文分组值迁移为稳定 ID。
+已经部署过旧版本时不必手动执行 `0002_categories.sql`：新版 Functions 首次访问会自动创建分组表、写入现有 6 个分组，并把旧中文分组值迁移为稳定 ID。
 
-### 2. 配置 Pages 绑定
+### 2. 给 Pages 项目添加绑定
 
-在 Cloudflare Pages 项目设置中添加：
+进入 Cloudflare Pages 项目 → 设置 → Functions → 绑定，添加：
 
 - D1 绑定名：`DB`
-- R2 绑定名：`GALLERY_BUCKET`
+- R2 绑定名：`GALLERY_BUCKET`，选择现有截图桶
 
-环境变量：
+再添加环境变量：
 
-| 名称 | 说明 |
-| --- | --- |
-| `CF_ACCESS_TEAM_DOMAIN` | Cloudflare Access 团队域名，例如 `https://example.cloudflareaccess.com`。 |
-| `CF_ACCESS_AUD` | Cloudflare Access 应用 AUD Tag。 |
-| `ADMIN_EMAIL` | 允许进入后台的邮箱。 |
-| `MAX_UPLOAD_BYTES` | 可选，默认 `26214400`。 |
+- `CF_ACCESS_TEAM_DOMAIN`：例如 `https://example.cloudflareaccess.com`
+- `CF_ACCESS_AUD`：Cloudflare Access 应用的 AUD Tag
+- `ADMIN_EMAIL`：唯一允许进入后台的邮箱
+- `MAX_UPLOAD_BYTES`：可选，默认 `26214400`（25 MiB）
+
+真实桶名和 Access 配置只放在 Cloudflare 后台或本地私密配置中，不会进入 `public/`。
 
 ### 3. 保护后台
 
-在 Cloudflare Zero Trust Access 中创建 Self-hosted 应用，保护：
+在 Cloudflare Zero Trust → Access → Applications 中创建 Self-hosted 应用，保护：
 
 - `你的域名/admin*`
 - `你的域名/api/admin/*`
 
-后端会验证 Access JWT 的签名、签发方、AUD、有效期和邮箱。
+策略只允许 `ADMIN_EMAIL` 对应的邮箱。后端还会验证 Access JWT 的签名、签发方、AUD、有效期和邮箱。
 
 ## 部署
 
-本项目包含 Pages Functions，不能使用 Cloudflare 网页 ZIP 拖放部署。使用 Wrangler：
+本项目包含 Pages Functions，不能再使用 Cloudflare 网页中的 ZIP 拖放方式。现有 Direct Upload 项目可以改用 Wrangler：
 
 ```powershell
 npx wrangler pages deploy public --project-name 你的Pages项目名
 ```
 
-也可以使用 Pages Git 集成：
+也可以把整个项目放入 GitHub，然后使用 Pages Git 集成：
 
-- Framework preset：None
-- Build command：留空
-- Build output directory：`public`
+- 框架预设：无
+- 构建命令：留空
+- 构建输出目录：`public`
 
-推荐使用独立分支和预览部署验证后再合并到 `main`。
+推荐日常更新使用独立分支：推送分支后先打开 Cloudflare Pages 自动生成的预览部署，确认无误再把 Pull Request 合并到 `main`，生产站点才会更新。
 
-## 后台同步规则
+## 导入现有图库
 
-- 上传：图片写入 R2，元数据写入 D1。
-- 多图上传：前端并发上传，全部结束后刷新一次私有 `gallery.json` 快照。
-- 编辑：只在确认保存且字段有变化时写入 D1。
-- 批量编辑：一次请求更新选中图片，并在有变更时刷新私有快照。
-- 分组管理：新增、改名、隐藏、排序和删除会刷新私有快照。
-- 整组迁移：只更新 D1 分类字段，R2 对象键保持不变。
+部署完成后打开：
+
+```text
+https://你的域名/admin
+```
+
+点击“选择旧 gallery.json”，选择 `seed/gallery.json`，再点击“导入旧索引”。导入只登记现有 R2 图片，不会重复上传图片。
+
+## 后台操作同步规则
+
+- 上传：写入 R2 `gallery/{随机ID}.{扩展名}`，新增 D1 记录并刷新私有 gallery 快照。
+- 编辑：更新 D1 中的分类、时间、标题、评论、标签、置顶和加精信息，并刷新私有快照。
+- 批量编辑：可多选图片后统一移动分组、设为或取消精选、置顶或取消置顶，并刷新私有快照。
+- 分组管理：支持新增、改名、公开显示/隐藏及上下排序；有图片的分组必须先迁移图片才能删除。
+- 整组迁移：把来源组的全部图片记录改到目标组并刷新私有快照；R2 对象键保持不变。
 - 删除：同时删除 R2 图片、D1 记录并刷新私有快照。
-- 导出：后台导出 `gallery.private.{date}.json`，用于备份或迁移。
-
-## 备份建议
-
-- 定期导出私有 gallery 快照。
-- 使用 R2 生命周期或外部同步工具备份对象。
-- 使用 Wrangler 或 Cloudflare 控制台备份 D1。
+- 置顶/加精：每个分类支持多张；结束时间留空表示永久，否则到期后自动停止展示标记和优先排序。
