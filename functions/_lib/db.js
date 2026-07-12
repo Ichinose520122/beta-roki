@@ -88,6 +88,7 @@ export function adminItem(row, now = new Date()) {
   const category = findCategory(row.category);
   return {
     ...publicItem(row, now),
+    categoryId: category?.id || "",
     category: category?.source || row.category,
     categoryName: category?.name || row.category,
     pinnedEnabled: Boolean(row.is_pinned),
