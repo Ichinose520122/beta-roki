@@ -26,12 +26,16 @@ export function normalizeTags(value) {
 }
 
 export function validShotTime(value) {
-  const text = cleanText(value, 19);
-  return /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(text) ? text : null;
+  return normalizeDateTime(value) || null;
 }
 
 export function validOptionalDateTime(value) {
   if (value === null || value === undefined || value === "") return null;
-  const text = cleanText(value, 19);
-  return /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(text) ? text : undefined;
+  return normalizeDateTime(value) || undefined;
+}
+
+function normalizeDateTime(value) {
+  const text = cleanText(value, 25).replace("T", " ");
+  const match = /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2})(?::(\d{2}))?$/.exec(text);
+  return match ? `${match[1]}:${match[2] || "00"}` : "";
 }

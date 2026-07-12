@@ -498,7 +498,9 @@ function setDefaultUploadTime() {
 }
 
 function fromLocalInput(value) {
-  return value ? String(value).replace("T", " ").slice(0, 19) : "";
+  if (!value) return "";
+  const text = String(value).replace("T", " ").slice(0, 19);
+  return /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(text) ? `${text}:00` : text;
 }
 
 function toLocalInput(value) {
