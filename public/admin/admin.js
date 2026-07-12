@@ -26,11 +26,7 @@ const elements = {
   clearSelection: document.querySelector("#clear-selection"),
   bulkButtons: [...document.querySelectorAll("[data-bulk-action]")],
   openUpload: document.querySelector("#open-upload"),
-  openCategories: document.querySelector("#open-categories"),
   openMove: document.querySelector("#open-move"),
-  categoryDialog: document.querySelector("#category-dialog"),
-  categoryCreateForm: document.querySelector("#category-create-form"),
-  categoryManagerList: document.querySelector("#category-manager-list"),
   moveDialog: document.querySelector("#move-dialog"),
   moveForm: document.querySelector("#move-form"),
   uploadDialog: document.querySelector("#upload-dialog"),
@@ -72,7 +68,6 @@ async function loadGallery() {
     elements.adminEmail.textContent = data.admin || "";
     populateCategories();
     render();
-    if (elements.categoryDialog.open) renderCategoryManager();
   } catch (error) {
     showToast(error.message, true);
     elements.summary.textContent = "后台数据读取失败";
@@ -96,8 +91,8 @@ function populateCategories() {
     else if (select === elements.bulkCategory) select.replaceChildren(new Option("选择目标分组", ""));
     else select.replaceChildren();
     state.categories.forEach((category) => {
-      const label = category.visible ? category.name : `${category.name}（已隐藏）`;
-      select.add(new Option(label, category.id));
+      const value = select === elements.category ? category.id : category.source;
+      select.add(new Option(category.name, value));
     });
     select.value = current;
   });
@@ -126,7 +121,7 @@ function imageMatchesCategory(image, categoryId) {
   const category = state.categories.find((item) => item.id === categoryId);
   if (!category) return false;
   if (image.categoryId) return image.categoryId === category.id;
-  return [category.id, category.name, ...(category.aliases || [])].includes(image.category);
+  return [category.source, category.name, ...(category.aliases || [])].includes(image.category);
 }
 
 function render() {
@@ -250,10 +245,6 @@ function bindControls() {
   });
 
   elements.openUpload.addEventListener("click", () => elements.uploadDialog.showModal());
-  elements.openCategories.addEventListener("click", () => {
-    renderCategoryManager();
-    elements.categoryDialog.showModal();
-  });
   elements.openMove.addEventListener("click", () => {
     syncMoveTargets();
     elements.moveDialog.showModal();
@@ -275,140 +266,6 @@ function bindControls() {
   elements.importButton.addEventListener("click", importLegacyGallery);
   elements.moveForm.elements.fromCategory.addEventListener("change", syncMoveTargets);
   elements.moveForm.addEventListener("submit", moveCategory);
-  elements.categoryCreateForm.addEventListener("submit", createCategory);
-}
-
-function renderCategoryManager() {
-  elements.categoryManagerList.replaceChildren();
-  state.categories.forEach((category, index) => {
-    const row = document.createElement("article");
-    row.className = "category-manager-row";
-
-    const name = document.createElement("input");
-    name.type = "text";
-    name.maxLength = 60;
-    name.value = category.name;
-    name.setAttribute("aria-label", `${category.name}的分组名称`);
-
-    const visibleLabel = document.createElement("label");
-    visibleLabel.className = "category-visible";
-    const visible = document.createElement("input");
-    visible.type = "checkbox";
-    visible.checked = category.visible;
-    visibleLabel.append(visible, document.createTextNode("公开显示"));
-
-    const count = document.createElement("span");
-    count.className = "category-count";
-    count.textContent = `${category.imageCount || 0} 张`;
-
-    const up = document.createElement("button");
-    up.type = "button";
-    up.textContent = "↑";
-    up.title = "向上移动";
-    up.disabled = index === 0;
-    up.addEventListener("click", () => reorderCategory(index, index - 1));
-
-    const down = document.createElement("button");
-    down.type = "button";
-    down.textContent = "↓";
-    down.title = "向下移动";
-    down.disabled = index === state.categories.length - 1;
-    down.addEventListener("click", () => reorderCategory(index, index + 1));
-
-    const save = document.createElement("button");
-    save.type = "button";
-    save.textContent = "保存";
-    save.addEventListener("click", () => saveCategory(category, name.value, visible.checked, save));
-
-    const remove = document.createElement("button");
-    remove.type = "button";
-    remove.className = "danger";
-    remove.textContent = "删除";
-    remove.disabled = Number(category.imageCount || 0) > 0;
-    remove.title = remove.disabled ? "请先迁移这个分组中的图片" : "删除空分组";
-    remove.addEventListener("click", () => deleteCategory(category, remove));
-
-    row.append(name, visibleLabel, count, up, down, save, remove);
-    elements.categoryManagerList.append(row);
-  });
-}
-
-async function createCategory(event) {
-  event.preventDefault();
-  const submit = event.submitter;
-  const name = elements.categoryCreateForm.elements.name.value.trim();
-  if (!name) return;
-  submit.disabled = true;
-  try {
-    await request("/api/admin/categories", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
-    });
-    elements.categoryCreateForm.reset();
-    await loadGallery();
-    showToast(`已新增分组“${name}”`);
-  } catch (error) {
-    showToast(error.message, true);
-  } finally {
-    submit.disabled = false;
-  }
-}
-
-async function saveCategory(category, nameValue, visible, button) {
-  const name = nameValue.trim();
-  if (!name) {
-    showToast("分组名称不能为空", true);
-    return;
-  }
-  button.disabled = true;
-  try {
-    await request(`/api/admin/categories/${encodeURIComponent(category.id)}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, visible }),
-    });
-    await loadGallery();
-    showToast("分组设置已保存");
-  } catch (error) {
-    showToast(error.message, true);
-  } finally {
-    button.disabled = false;
-  }
-}
-
-async function reorderCategory(fromIndex, toIndex) {
-  if (toIndex < 0 || toIndex >= state.categories.length) return;
-  const ids = state.categories.map((category) => category.id);
-  const [moved] = ids.splice(fromIndex, 1);
-  ids.splice(toIndex, 0, moved);
-  try {
-    await request("/api/admin/category-order", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids }),
-    });
-    await loadGallery();
-    showToast("分组顺序已更新");
-  } catch (error) {
-    showToast(error.message, true);
-  }
-}
-
-async function deleteCategory(category, button) {
-  if (!confirm(`确定删除空分组“${category.name}”吗？`)) return;
-  button.disabled = true;
-  try {
-    await request(`/api/admin/categories/${encodeURIComponent(category.id)}`, {
-      method: "DELETE",
-    });
-    await loadGallery();
-    showToast(`已删除分组“${category.name}”`);
-  } catch (error) {
-    showToast(error.message, true);
-  } finally {
-    button.disabled = false;
-  }
 }
 
 const BULK_LABELS = Object.freeze({
@@ -428,7 +285,7 @@ async function runBulkAction(action) {
     return;
   }
 
-  const categoryName = state.categories.find((item) => item.id === category)?.name || category;
+  const categoryName = state.categories.find((item) => item.source === category)?.name || category;
   const description = action === "move"
     ? `把选中的 ${ids.length} 张图片移动到“${categoryName}”`
     : `对选中的 ${ids.length} 张图片执行“${BULK_LABELS[action]}”`;
@@ -474,8 +331,8 @@ async function moveCategory(event) {
   const submit = event.submitter;
   const fromCategory = elements.moveForm.elements.fromCategory.value;
   const toCategory = elements.moveForm.elements.toCategory.value;
-  const fromName = state.categories.find((item) => item.id === fromCategory)?.name || fromCategory;
-  const toName = state.categories.find((item) => item.id === toCategory)?.name || toCategory;
+  const fromName = state.categories.find((item) => item.source === fromCategory)?.name || fromCategory;
+  const toName = state.categories.find((item) => item.source === toCategory)?.name || toCategory;
   const count = state.images.filter((image) => image.category === fromCategory).length;
 
   if (!count) {
