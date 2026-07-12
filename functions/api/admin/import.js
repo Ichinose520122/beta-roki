@@ -1,4 +1,4 @@
-import { normalizeCategorySource } from "../../_lib/categories.js";
+import { findCategoryInList, listCategories } from "../../_lib/categories.js";
 import { ensureSchema, writePrivateGallerySnapshot } from "../../_lib/db.js";
 import {
   apiError,
@@ -39,9 +39,10 @@ export async function onRequestPost(context) {
     if (!Array.isArray(input)) return apiError("请选择原有的 gallery.json 文件");
     if (input.length > 10000) return apiError("索引记录过多");
 
+    const categories = await listCategories(context.env.DB);
     const records = [];
     for (const item of input) {
-      const category = normalizeCategorySource(cleanText(item?.category, 80));
+      const category = findCategoryInList(categories, cleanText(item?.category, 80))?.id || null;
       const file = cleanText(item?.file, 240);
       const shotAt = validShotTime(item?.time);
       if (!category || !file || !shotAt || file.includes("..")) continue;

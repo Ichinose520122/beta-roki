@@ -1,4 +1,4 @@
-import { normalizeCategorySource } from "../../../_lib/categories.js";
+import { listCategories, normalizeCategoryId } from "../../../_lib/categories.js";
 import { adminItem, ensureSchema, writePrivateGallerySnapshot } from "../../../_lib/db.js";
 import {
   apiError,
@@ -23,7 +23,10 @@ export async function onRequestPatch(context) {
     if (!current) return apiError("图片不存在", 404);
 
     const body = await context.request.json();
-    const category = normalizeCategorySource(cleanText(body.category ?? current.category, 80));
+    const category = await normalizeCategoryId(
+      context.env.DB,
+      cleanText(body.category ?? current.category, 80),
+    );
     const shotAt = validShotTime(body.time ?? current.shot_at);
     if (!category) return apiError("分类无效");
     if (!shotAt) return apiError("截图时间格式无效");
@@ -74,7 +77,8 @@ export async function onRequestPatch(context) {
     const updated = await context.env.DB.prepare("SELECT * FROM gallery_items WHERE id = ?1")
       .bind(id)
       .first();
-    return json({ ok: true, image: adminItem(updated) });
+    const categories = await listCategories(context.env.DB);
+    return json({ ok: true, image: adminItem(updated, categories) });
   } catch (error) {
     console.error(error);
     return apiError("保存失败", 500);
