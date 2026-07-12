@@ -32,10 +32,7 @@ seed/gallery.json       原有 715 张图片的一次性导入索引，不会公
 ```powershell
 npx wrangler d1 create ringo-rock-gallery
 npx wrangler d1 execute ringo-rock-gallery --remote --file=./migrations/0001_gallery.sql
-npx wrangler d1 execute ringo-rock-gallery --remote --file=./migrations/0002_categories.sql
 ```
-
-已经部署过旧版本时不必手动执行 `0002_categories.sql`：新版 Functions 首次访问会自动创建分组表、写入现有 6 个分组，并把旧中文分组值迁移为稳定 ID。
 
 ### 2. 给 Pages 项目添加绑定
 
@@ -93,7 +90,6 @@ https://你的域名/admin
 - 上传：写入 R2 `gallery/{随机ID}.{扩展名}`，新增 D1 记录并刷新私有 gallery 快照。
 - 编辑：更新 D1 中的分类、时间、标题、评论、标签、置顶和加精信息，并刷新私有快照。
 - 批量编辑：可多选图片后统一移动分组、设为或取消精选、置顶或取消置顶，并刷新私有快照。
-- 分组管理：支持新增、改名、公开显示/隐藏及上下排序；有图片的分组必须先迁移图片才能删除。
 - 整组迁移：把来源组的全部图片记录改到目标组并刷新私有快照；R2 对象键保持不变。
 - 删除：同时删除 R2 图片、D1 记录并刷新私有快照。
 - 置顶/加精：每个分类支持多张；结束时间留空表示永久，否则到期后自动停止展示标记和优先排序。

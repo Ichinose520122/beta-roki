@@ -1,4 +1,4 @@
-import { normalizeCategoryId } from "../../_lib/categories.js";
+import { normalizeCategorySource } from "../../_lib/categories.js";
 import { ensureSchema, writePrivateGallerySnapshot } from "../../_lib/db.js";
 import {
   apiError,
@@ -43,7 +43,7 @@ export async function onRequestPost(context) {
     const now = new Date().toISOString();
     let changed = 0;
     if (body.action === "move") {
-      const category = await normalizeCategoryId(context.env.DB, cleanText(body.category, 80));
+      const category = normalizeCategorySource(cleanText(body.category, 80));
       if (!category) return apiError("目标分组无效");
       changed = await updateChunks(context.env.DB, ids, (chunk) => {
         const placeholders = chunk.map((_, index) => `?${index + 3}`).join(", ");

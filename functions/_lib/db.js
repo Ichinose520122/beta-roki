@@ -1,8 +1,4 @@
-import {
-  DEFAULT_CATEGORIES,
-  findCategoryInList,
-  listCategories,
-} from "./categories.js";
+import { CATEGORIES, findCategory } from "./categories.js";
 
 const initialized = new WeakMap();
 
@@ -24,20 +20,8 @@ const TABLE_SQL = `CREATE TABLE IF NOT EXISTS gallery_items (
   updated_at TEXT NOT NULL
 )`;
 
-const CATEGORIES_TABLE_SQL = `CREATE TABLE IF NOT EXISTS gallery_categories (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL UNIQUE,
-  aliases_json TEXT NOT NULL DEFAULT '[]',
-  sort_order INTEGER NOT NULL DEFAULT 0,
-  is_visible INTEGER NOT NULL DEFAULT 1,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
-)`;
-
 const CATEGORY_INDEX_SQL =
   "CREATE INDEX IF NOT EXISTS gallery_items_category_idx ON gallery_items(category, shot_at DESC)";
-const CATEGORY_ORDER_INDEX_SQL =
-  "CREATE INDEX IF NOT EXISTS gallery_categories_order_idx ON gallery_categories(sort_order, created_at)";
 const SCHEDULE_INDEX_SQL =
   "CREATE INDEX IF NOT EXISTS gallery_items_schedule_idx ON gallery_items(is_pinned, pinned_until, is_featured, featured_until)";
 const SNAPSHOT_TABLE_SQL = `CREATE TABLE IF NOT EXISTS gallery_snapshots (
@@ -46,42 +30,19 @@ const SNAPSHOT_TABLE_SQL = `CREATE TABLE IF NOT EXISTS gallery_snapshots (
   updated_at TEXT NOT NULL
 )`;
 
-async function initializeSchema(db) {
-  await db.batch([
-    db.prepare(TABLE_SQL),
-    db.prepare(CATEGORIES_TABLE_SQL),
-    db.prepare(CATEGORY_INDEX_SQL),
-    db.prepare(CATEGORY_ORDER_INDEX_SQL),
-    db.prepare(SCHEDULE_INDEX_SQL),
-    db.prepare(SNAPSHOT_TABLE_SQL),
-  ]);
-
-  const now = new Date().toISOString();
-  await db.batch(DEFAULT_CATEGORIES.map((category, index) => db.prepare(
-    `INSERT OR IGNORE INTO gallery_categories
-      (id, name, aliases_json, sort_order, is_visible, created_at, updated_at)
-     VALUES (?1, ?2, ?3, ?4, 1, ?5, ?6)`,
-  ).bind(
-    category.id,
-    category.name,
-    JSON.stringify(category.aliases),
-    (index + 1) * 10,
-    now,
-    now,
-  )));
-
-  await db.batch(DEFAULT_CATEGORIES.map((category) => {
-    const legacyValues = [category.id, category.name, ...category.aliases];
-    const placeholders = legacyValues.map((_, index) => `?${index + 2}`).join(", ");
-    return db.prepare(
-      `UPDATE gallery_items SET category = ?1 WHERE category IN (${placeholders})`,
-    ).bind(category.id, ...legacyValues);
-  }));
-}
-
 export async function ensureSchema(db) {
   if (!db) throw new Error("缺少 D1 绑定 DB");
-  if (!initialized.has(db)) initialized.set(db, initializeSchema(db));
+  if (!initialized.has(db)) {
+    initialized.set(
+      db,
+      db.batch([
+        db.prepare(TABLE_SQL),
+        db.prepare(CATEGORY_INDEX_SQL),
+        db.prepare(SCHEDULE_INDEX_SQL),
+        db.prepare(SNAPSHOT_TABLE_SQL),
+      ]),
+    );
+  }
   await initialized.get(db);
 }
 
@@ -123,13 +84,13 @@ export function publicItem(row, now = new Date()) {
   };
 }
 
-export function adminItem(row, categories, now = new Date()) {
-  const category = findCategoryInList(categories, row.category);
+export function adminItem(row, now = new Date()) {
+  const category = findCategory(row.category);
   return {
     ...publicItem(row, now),
-    categoryId: category?.id || row.category,
-    category: category?.id || row.category,
-    categoryName: category?.name || "未分组",
+    categoryId: category?.id || "",
+    category: category?.source || row.category,
+    categoryName: category?.name || row.category,
     pinnedEnabled: Boolean(row.is_pinned),
     pinnedUntil: row.pinned_until || null,
     featuredEnabled: Boolean(row.is_featured),
@@ -166,36 +127,23 @@ export async function listRows(db, includeObjectKey = false) {
 }
 
 export async function writePrivateGallerySnapshot(env) {
-  const [rows, categories] = await Promise.all([
-    listRows(env.DB, true),
-    listCategories(env.DB),
-  ]);
+  const rows = await listRows(env.DB, true);
   const snapshot = {
-    version: 3,
+    version: 2,
     updatedAt: new Date().toISOString(),
-    categories: categories.map(({ id, name, sortOrder, visible }) => ({
-      id,
-      name,
-      sortOrder,
-      visible,
+    images: rows.map((row) => ({
+      id: row.id,
+      objectKey: row.object_key,
+      category: findCategory(row.category)?.source || row.category,
+      title: row.title || "",
+      comment: row.comment || "",
+      time: row.shot_at,
+      tags: safeTags(row.tags_json),
+      contentType: row.content_type,
+      size: Number(row.size || 0),
+      pinned: { enabled: Boolean(row.is_pinned), until: row.pinned_until || null },
+      featured: { enabled: Boolean(row.is_featured), until: row.featured_until || null },
     })),
-    images: rows.map((row) => {
-      const category = findCategoryInList(categories, row.category);
-      return {
-        id: row.id,
-        objectKey: row.object_key,
-        category: category?.id || row.category,
-        categoryName: category?.name || "未分组",
-        title: row.title || "",
-        comment: row.comment || "",
-        time: row.shot_at,
-        tags: safeTags(row.tags_json),
-        contentType: row.content_type,
-        size: Number(row.size || 0),
-        pinned: { enabled: Boolean(row.is_pinned), until: row.pinned_until || null },
-        featured: { enabled: Boolean(row.is_featured), until: row.featured_until || null },
-      };
-    }),
   };
 
   await env.DB.prepare(
@@ -208,13 +156,14 @@ export async function writePrivateGallerySnapshot(env) {
   return snapshot;
 }
 
-export function buildPublicGallery(rows, categories) {
+export function buildPublicGallery(rows) {
   const now = new Date();
-  const grouped = new Map(categories.map((category) => [category.id, []]));
+  const grouped = new Map(CATEGORIES.map((category) => [category.source, []]));
 
   rows.forEach((row) => {
-    const category = findCategoryInList(categories, row.category);
-    if (category) grouped.get(category.id).push(publicItem(row, now));
+    const source = findCategory(row.category)?.source || row.category;
+    if (!grouped.has(source)) grouped.set(source, []);
+    grouped.get(source).push(publicItem(row, now));
   });
 
   const sortItems = (a, b) => {
@@ -224,12 +173,12 @@ export function buildPublicGallery(rows, categories) {
   };
 
   return {
-    version: 3,
+    version: 2,
     generatedAt: now.toISOString(),
-    categories: categories.map((category) => ({
+    categories: CATEGORIES.map((category) => ({
       id: category.id,
       name: category.name,
-      images: (grouped.get(category.id) || []).sort(sortItems),
+      images: (grouped.get(category.source) || []).sort(sortItems),
     })),
   };
 }
