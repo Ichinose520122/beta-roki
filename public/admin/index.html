@@ -6,7 +6,7 @@
     <meta name="robots" content="noindex, nofollow" />
     <title>图库管理 · 一ノ瀬林檎的小洛克冒险之旅</title>
     <link rel="stylesheet" href="./admin.css" />
-    <script src="./admin.js?v=20260712-datetime-fix" defer></script>
+    <script src="./admin.js?v=20260712-category-manager" defer></script>
   </head>
   <body>
     <header class="admin-header">
@@ -30,6 +30,7 @@
           <input id="import-input" type="file" accept="application/json,.json" />
         </label>
         <button id="import-button" type="button" disabled>导入旧索引</button>
+        <button id="open-categories" type="button">管理分组</button>
         <button id="open-move" type="button">整组迁移</button>
         <a class="export-action" href="/api/admin/export">导出私有 gallery</a>
       </section>
@@ -75,6 +76,26 @@
         <p>可以上传新截图，或导入现有 gallery.json。</p>
       </div>
     </main>
+
+    <dialog id="category-dialog">
+      <section class="category-manager">
+        <header>
+          <div>
+            <h2>管理分组</h2>
+            <p>调整后的顺序会同步到公开图库。</p>
+          </div>
+          <button class="close-button" type="button" data-close="category-dialog" aria-label="关闭">×</button>
+        </header>
+
+        <form id="category-create-form" class="category-create-form">
+          <input name="name" maxlength="60" placeholder="新分组名称" required />
+          <button class="primary" type="submit">新增分组</button>
+        </form>
+
+        <div class="category-manager-list" id="category-manager-list"></div>
+        <p class="category-manager-note">有图片的分组需要先使用“整组迁移”，清空后才能删除。</p>
+      </section>
+    </dialog>
 
     <dialog id="move-dialog">
       <form class="editor" id="move-form">

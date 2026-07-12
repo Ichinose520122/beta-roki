@@ -1,4 +1,4 @@
-import { normalizeCategorySource } from "../../_lib/categories.js";
+import { listCategories, normalizeCategoryId } from "../../_lib/categories.js";
 import { adminItem, ensureSchema, writePrivateGallerySnapshot } from "../../_lib/db.js";
 import {
   apiError,
@@ -35,7 +35,7 @@ export async function onRequestPost(context) {
     const maxBytes = Number(context.env.MAX_UPLOAD_BYTES || 25 * 1024 * 1024);
     if (!file.size || file.size > maxBytes) return apiError("图片为空或超过上传大小限制");
 
-    const category = normalizeCategorySource(cleanText(form.get("category"), 80));
+    const category = await normalizeCategoryId(context.env.DB, cleanText(form.get("category"), 80));
     const shotAt = validShotTime(form.get("time"));
     if (!category) return apiError("分类无效");
     if (!shotAt) return apiError("截图时间格式无效");
@@ -86,7 +86,8 @@ export async function onRequestPost(context) {
     const row = await context.env.DB.prepare("SELECT * FROM gallery_items WHERE id = ?1")
       .bind(id)
       .first();
-    return json({ ok: true, image: adminItem(row) }, { status: 201 });
+    const categories = await listCategories(context.env.DB);
+    return json({ ok: true, image: adminItem(row, categories) }, { status: 201 });
   } catch (error) {
     console.error(error);
     if (objectKey) await context.env.GALLERY_BUCKET.delete(objectKey).catch(() => {});
