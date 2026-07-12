@@ -46,6 +46,28 @@
         </select>
       </section>
 
+      <section class="bulk-bar" aria-label="批量编辑">
+        <label class="select-visible">
+          <input id="select-visible" type="checkbox" />
+          <span>选择当前结果</span>
+        </label>
+        <strong id="selected-count" aria-live="polite">已选 0 张</strong>
+        <select id="bulk-category" aria-label="批量移动到分组">
+          <option value="">选择目标分组</option>
+        </select>
+        <button id="bulk-move" type="button" disabled>移动分组</button>
+        <span class="bulk-divider" aria-hidden="true"></span>
+        <label class="bulk-until">
+          <span>置顶/精选至（留空永久）</span>
+          <input id="bulk-until" type="datetime-local" step="1" aria-label="批量置顶或精选的结束时间，留空表示永久" />
+        </label>
+        <button type="button" data-bulk-action="feature-on" disabled>设为精选</button>
+        <button type="button" data-bulk-action="feature-off" disabled>取消精选</button>
+        <button type="button" data-bulk-action="pin-on" disabled>置顶</button>
+        <button type="button" data-bulk-action="pin-off" disabled>取消置顶</button>
+        <button class="quiet" id="clear-selection" type="button" disabled>清空选择</button>
+      </section>
+
       <section class="image-list" id="image-list" aria-busy="true"></section>
 
       <div class="empty" id="empty" hidden>

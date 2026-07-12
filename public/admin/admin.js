@@ -7,6 +7,7 @@ const state = {
   category: "",
   filterState: "",
   importFile: null,
+  selectedIds: new Set(),
 };
 
 const elements = {
@@ -17,6 +18,13 @@ const elements = {
   query: document.querySelector("#filter-query"),
   category: document.querySelector("#filter-category"),
   filterState: document.querySelector("#filter-state"),
+  selectVisible: document.querySelector("#select-visible"),
+  selectedCount: document.querySelector("#selected-count"),
+  bulkCategory: document.querySelector("#bulk-category"),
+  bulkMove: document.querySelector("#bulk-move"),
+  bulkUntil: document.querySelector("#bulk-until"),
+  clearSelection: document.querySelector("#clear-selection"),
+  bulkButtons: [...document.querySelectorAll("[data-bulk-action]")],
   openUpload: document.querySelector("#open-upload"),
   openMove: document.querySelector("#open-move"),
   moveDialog: document.querySelector("#move-dialog"),
@@ -55,6 +63,8 @@ async function loadGallery() {
     const data = await request("/api/admin/gallery");
     state.categories = data.categories || [];
     state.images = data.images || [];
+    const availableIds = new Set(state.images.map((image) => image.id));
+    state.selectedIds = new Set([...state.selectedIds].filter((id) => availableIds.has(id)));
     elements.adminEmail.textContent = data.admin || "";
     populateCategories();
     render();
@@ -73,10 +83,12 @@ function populateCategories() {
     elements.editForm.elements.category,
     elements.moveForm.elements.fromCategory,
     elements.moveForm.elements.toCategory,
+    elements.bulkCategory,
   ];
   selects.forEach((select, index) => {
     const current = select.value;
     if (index === 0) select.replaceChildren(new Option("全部分类", ""));
+    else if (select === elements.bulkCategory) select.replaceChildren(new Option("选择目标分组", ""));
     else select.replaceChildren();
     state.categories.forEach((category) => select.add(new Option(category.name, category.source)));
     select.value = current;
@@ -106,11 +118,26 @@ function render() {
   const pinned = state.images.filter((image) => image.pinned).length;
   const featured = state.images.filter((image) => image.featured).length;
   elements.summary.textContent = `${state.images.length} 张图片 · ${pinned} 张置顶 · ${featured} 张精选`;
+  renderSelectionState(images);
 }
 
 function createRow(image) {
   const row = document.createElement("article");
   row.className = "image-row";
+  row.classList.toggle("is-selected", state.selectedIds.has(image.id));
+
+  const selection = document.createElement("label");
+  selection.className = "row-select";
+  const checkbox = document.createElement("input");
+  checkbox.type = "checkbox";
+  checkbox.checked = state.selectedIds.has(image.id);
+  checkbox.setAttribute("aria-label", `选择：${image.title || image.categoryName}`);
+  checkbox.addEventListener("change", () => {
+    if (checkbox.checked) state.selectedIds.add(image.id);
+    else state.selectedIds.delete(image.id);
+    render();
+  });
+  selection.append(checkbox);
 
   const picture = document.createElement("img");
   picture.src = image.url;
@@ -148,8 +175,21 @@ function createRow(image) {
   edit.type = "button";
   edit.textContent = "编辑";
   edit.addEventListener("click", () => openEdit(image));
-  row.append(picture, main, meta, edit);
+  row.append(selection, picture, main, meta, edit);
   return row;
+}
+
+function renderSelectionState(visibleImages = filteredImages()) {
+  const selectedCount = state.selectedIds.size;
+  const visibleIds = visibleImages.map((image) => image.id);
+  const visibleSelected = visibleIds.filter((id) => state.selectedIds.has(id)).length;
+  elements.selectedCount.textContent = `已选 ${selectedCount} 张`;
+  elements.selectVisible.checked = visibleIds.length > 0 && visibleSelected === visibleIds.length;
+  elements.selectVisible.indeterminate = visibleSelected > 0 && visibleSelected < visibleIds.length;
+  elements.selectVisible.disabled = visibleIds.length === 0;
+  elements.bulkMove.disabled = selectedCount === 0 || !elements.bulkCategory.value;
+  elements.clearSelection.disabled = selectedCount === 0;
+  elements.bulkButtons.forEach((button) => { button.disabled = selectedCount === 0; });
 }
 
 function makeBadge(text) {
@@ -169,6 +209,23 @@ function bindControls() {
   });
   elements.filterState.addEventListener("change", (event) => {
     state.filterState = event.target.value;
+    render();
+  });
+  elements.selectVisible.addEventListener("change", () => {
+    const visibleIds = filteredImages().map((image) => image.id);
+    visibleIds.forEach((id) => {
+      if (elements.selectVisible.checked) state.selectedIds.add(id);
+      else state.selectedIds.delete(id);
+    });
+    render();
+  });
+  elements.bulkCategory.addEventListener("change", () => renderSelectionState());
+  elements.bulkMove.addEventListener("click", () => runBulkAction("move"));
+  elements.bulkButtons.forEach((button) => {
+    button.addEventListener("click", () => runBulkAction(button.dataset.bulkAction));
+  });
+  elements.clearSelection.addEventListener("click", () => {
+    state.selectedIds.clear();
     render();
   });
 
@@ -194,6 +251,53 @@ function bindControls() {
   elements.importButton.addEventListener("click", importLegacyGallery);
   elements.moveForm.elements.fromCategory.addEventListener("change", syncMoveTargets);
   elements.moveForm.addEventListener("submit", moveCategory);
+}
+
+const BULK_LABELS = Object.freeze({
+  move: "移动分组",
+  "feature-on": "设为精选",
+  "feature-off": "取消精选",
+  "pin-on": "置顶",
+  "pin-off": "取消置顶",
+});
+
+async function runBulkAction(action) {
+  const ids = [...state.selectedIds];
+  if (!ids.length) return;
+  const category = elements.bulkCategory.value;
+  if (action === "move" && !category) {
+    showToast("请先选择目标分组", true);
+    return;
+  }
+
+  const categoryName = state.categories.find((item) => item.source === category)?.name || category;
+  const description = action === "move"
+    ? `把选中的 ${ids.length} 张图片移动到“${categoryName}”`
+    : `对选中的 ${ids.length} 张图片执行“${BULK_LABELS[action]}”`;
+  if (!confirm(`${description}吗？`)) return;
+
+  const controls = [elements.bulkMove, ...elements.bulkButtons, elements.clearSelection];
+  controls.forEach((control) => { control.disabled = true; });
+  try {
+    const result = await request("/api/admin/bulk", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ids,
+        action,
+        ...(action === "move" ? { category } : {}),
+        ...(["feature-on", "pin-on"].includes(action)
+          ? { until: fromLocalInput(elements.bulkUntil.value) }
+          : {}),
+      }),
+    });
+    state.selectedIds.clear();
+    await loadGallery();
+    showToast(`批量操作完成，共更新 ${result.changed} 张图片`);
+  } catch (error) {
+    showToast(error.message, true);
+    renderSelectionState();
+  }
 }
 
 function syncMoveTargets() {
