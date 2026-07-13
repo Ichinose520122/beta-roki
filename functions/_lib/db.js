@@ -45,6 +45,11 @@ const SNAPSHOT_TABLE_SQL = `CREATE TABLE IF NOT EXISTS gallery_snapshots (
   payload TEXT NOT NULL,
   updated_at TEXT NOT NULL
 )`;
+const SETTINGS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS gallery_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+)`;
 
 async function initializeSchema(db) {
   await db.batch([
@@ -54,6 +59,7 @@ async function initializeSchema(db) {
     db.prepare(CATEGORY_ORDER_INDEX_SQL),
     db.prepare(SCHEDULE_INDEX_SQL),
     db.prepare(SNAPSHOT_TABLE_SQL),
+    db.prepare(SETTINGS_TABLE_SQL),
   ]);
 
   const now = new Date().toISOString();
@@ -165,14 +171,41 @@ export async function listRows(db, includeObjectKey = false) {
   return result.results || [];
 }
 
+export async function getSetting(db, key) {
+  const row = await db.prepare(
+    "SELECT value FROM gallery_settings WHERE key = ?1",
+  ).bind(String(key)).first();
+  return row?.value ? String(row.value) : "";
+}
+
+export async function setSetting(db, key, value) {
+  const normalizedKey = String(key);
+  const normalizedValue = String(value || "");
+  if (!normalizedValue) {
+    await db.prepare("DELETE FROM gallery_settings WHERE key = ?1")
+      .bind(normalizedKey)
+      .run();
+    return "";
+  }
+  const now = new Date().toISOString();
+  await db.prepare(
+    `INSERT INTO gallery_settings (key, value, updated_at)
+     VALUES (?1, ?2, ?3)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+  ).bind(normalizedKey, normalizedValue, now).run();
+  return normalizedValue;
+}
+
 export async function writePrivateGallerySnapshot(env) {
-  const [rows, categories] = await Promise.all([
+  const [rows, categories, heroImageId] = await Promise.all([
     listRows(env.DB, true),
     listCategories(env.DB),
+    getSetting(env.DB, "hero_image_id"),
   ]);
   const snapshot = {
     version: 3,
     updatedAt: new Date().toISOString(),
+    settings: { heroImageId },
     categories: categories.map(({ id, name, sortOrder, visible }) => ({
       id,
       name,
@@ -233,4 +266,3 @@ export function buildPublicGallery(rows, categories) {
     })),
   };
 }
-

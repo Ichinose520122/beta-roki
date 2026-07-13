@@ -148,7 +148,10 @@ main { padding: 20px 0 60px; }
 
 .image-row:hover { border-color: #dca7b0; transform: translateY(-1px); }
 .image-row.is-selected { background: #fff0ee; border-color: var(--accent); box-shadow: inset 0 0 0 2px rgba(255,255,255,.8), 0 8px 20px rgba(131,84,96,.1); }
+.image-row.is-hero { border-color: #d596a4; box-shadow: inset 0 0 0 2px #fff1ee, 0 8px 24px rgba(131,84,96,.13); }
 .row-select { display: grid; align-self: stretch; cursor: pointer; place-items: center; }
+.row-actions { display: grid; gap: 6px; min-width: 92px; }
+.row-actions button { padding: 7px 9px; font-size: 11px; }
 
 .image-row img {
   display: block;
@@ -287,5 +290,5 @@ dialog::backdrop { background: rgba(76, 49, 58, 0.55); backdrop-filter: blur(5px
   .bulk-bar::before { flex: 0 0 auto; }
   .image-row { grid-template-columns: 26px 76px minmax(0, 1fr); gap: 9px; }
   .image-row img { width: 76px; }
-  .image-row > button { grid-column: 3; justify-self: end; }
+  .row-actions { grid-column: 3; justify-self: end; }
 }

@@ -1,5 +1,10 @@
 import { listCategories, normalizeCategoryId } from "../../../_lib/categories.js";
-import { adminItem, ensureSchema, writePrivateGallerySnapshot } from "../../../_lib/db.js";
+import {
+  adminItem,
+  ensureSchema,
+  setSetting,
+  writePrivateGallerySnapshot,
+} from "../../../_lib/db.js";
 import {
   apiError,
   cleanText,
@@ -103,6 +108,10 @@ export async function onRequestDelete(context) {
 
     await context.env.GALLERY_BUCKET.delete(current.object_key);
     await context.env.DB.prepare("DELETE FROM gallery_items WHERE id = ?1").bind(id).run();
+    const heroSetting = await context.env.DB.prepare(
+      "SELECT value FROM gallery_settings WHERE key = 'hero_image_id'",
+    ).first();
+    if (heroSetting?.value === id) await setSetting(context.env.DB, "hero_image_id", "");
     await writePrivateGallerySnapshot(context.env);
     const imageUrl = new URL(`/gallery/${encodeURIComponent(id)}`, context.request.url);
     const downloadUrl = new URL(imageUrl.toString());

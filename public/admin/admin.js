@@ -10,6 +10,7 @@ const state = {
   selectedIds: new Set(),
   editOriginal: null,
   categoryDrafts: [],
+  heroImageId: "",
 };
 
 const UPLOAD_CONCURRENCY = 4;
@@ -72,6 +73,7 @@ async function loadGallery() {
     const data = await request("/api/admin/gallery");
     state.categories = data.categories || [];
     state.images = data.images || [];
+    state.heroImageId = data.settings?.heroImageId || "";
     const availableIds = new Set(state.images.map((image) => image.id));
     state.selectedIds = new Set([...state.selectedIds].filter((id) => availableIds.has(id)));
     elements.adminEmail.textContent = data.admin || "";
@@ -150,6 +152,7 @@ function createRow(image) {
   const row = document.createElement("article");
   row.className = "image-row";
   row.classList.toggle("is-selected", state.selectedIds.has(image.id));
+  row.classList.toggle("is-hero", state.heroImageId === image.id);
 
   const selection = document.createElement("label");
   selection.className = "row-select";
@@ -185,6 +188,7 @@ function createRow(image) {
   badges.className = "badges";
   if (image.pinnedEnabled) badges.append(makeBadge(image.pinned ? "置顶" : "置顶已到期"));
   if (image.featuredEnabled) badges.append(makeBadge(image.featured ? "精选" : "精选已到期"));
+  if (state.heroImageId === image.id) badges.append(makeBadge("标题图"));
   (image.tags || []).forEach((tag) => badges.append(makeBadge(`# ${tag}`)));
   main.append(badges);
 
@@ -200,8 +204,42 @@ function createRow(image) {
   edit.type = "button";
   edit.textContent = "编辑";
   edit.addEventListener("click", () => openEdit(image));
-  row.append(selection, picture, main, meta, edit);
+
+  const hero = document.createElement("button");
+  hero.type = "button";
+  const isHero = state.heroImageId === image.id;
+  hero.textContent = isHero ? "取消标题图" : "设为标题图";
+  hero.className = isHero ? "quiet" : "";
+  hero.addEventListener("click", () => setHeroImage(image, hero));
+
+  const actions = document.createElement("div");
+  actions.className = "row-actions";
+  actions.append(hero, edit);
+  row.append(selection, picture, main, meta, actions);
   return row;
+}
+
+async function setHeroImage(image, button) {
+  const removing = state.heroImageId === image.id;
+  const description = removing
+    ? "取消当前网页顶部标题图"
+    : `把这张照片设为网页顶部标题图`;
+  if (!confirm(`${description}吗？`)) return;
+
+  button.disabled = true;
+  try {
+    await request("/api/admin/site-settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ heroImageId: removing ? "" : image.id }),
+    });
+    await loadGallery();
+    showToast(removing ? "已取消网页标题图" : "网页标题图已更新");
+  } catch (error) {
+    showToast(error.message, true);
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function renderSelectionState(visibleImages = filteredImages()) {

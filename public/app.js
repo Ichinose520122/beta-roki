@@ -11,9 +11,12 @@ const state = {
   query: "",
   visibleImages: [],
   lightboxIndex: 0,
+  heroImage: null,
 };
 
 const elements = {
+  header: document.querySelector(".app-header"),
+  headerCover: document.querySelector("#header-cover"),
   tabs: document.querySelector("#category-tabs"),
   grid: document.querySelector("#gallery-grid"),
   empty: document.querySelector("#empty-state"),
@@ -45,20 +48,45 @@ async function init() {
   try {
     const response = await fetch(CONFIG.galleryApi, {
       headers: { Accept: "application/json" },
+      cache: "no-cache",
     });
     if (!response.ok) throw new Error(`图库接口加载失败：${response.status}`);
 
     const data = await response.json();
+    state.heroImage = normalizeHeroImage(data.heroImage);
     state.categories = normalizeGalleryData(data);
     if (!state.categories.length) throw new Error("图库中没有分类");
 
     state.activeCategoryId = state.categories[0].id;
+    renderHeroImage();
     renderTabs();
     renderGallery();
   } catch (error) {
     console.error(error);
     showFatalError(error.message);
   }
+}
+
+function normalizeHeroImage(image) {
+  if (!image?.id || !image?.url) return null;
+  return {
+    id: String(image.id),
+    url: String(image.url),
+    title: image.title ? String(image.title) : "",
+    categoryName: image.categoryName ? String(image.categoryName) : "",
+  };
+}
+
+function renderHeroImage() {
+  const image = state.heroImage;
+  if (!image) return;
+  elements.headerCover.hidden = false;
+  elements.headerCover.onload = () => elements.header.classList.add("has-cover");
+  elements.headerCover.onerror = () => {
+    elements.headerCover.hidden = true;
+    elements.header.classList.remove("has-cover");
+  };
+  elements.headerCover.src = image.url;
 }
 
 function normalizeGalleryData(data) {
@@ -386,4 +414,3 @@ function showFatalError(message) {
   elements.empty.querySelector("p").textContent = message;
   elements.summary.textContent = "无法连接图库服务";
 }
-

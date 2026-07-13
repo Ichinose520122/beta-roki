@@ -33,9 +33,11 @@ seed/gallery.json       原有 715 张图片的一次性导入索引，不会公
 npx wrangler d1 create ringo-rock-gallery
 npx wrangler d1 execute ringo-rock-gallery --remote --file=./migrations/0001_gallery.sql
 npx wrangler d1 execute ringo-rock-gallery --remote --file=./migrations/0002_categories.sql
+npx wrangler d1 execute ringo-rock-gallery --remote --file=./migrations/0003_settings.sql
 ```
 
 已经部署过旧版本时不必手动执行 `0002_categories.sql`：新版 Functions 首次访问会自动创建分组表、写入现有 6 个分组，并把旧中文分组值迁移为稳定 ID。
+`0003_settings.sql` 同样会由新版 Functions 自动创建，用于保存网页标题图等站点设置。
 
 ### 2. 给 Pages 项目添加绑定
 
@@ -98,3 +100,4 @@ https://你的域名/admin
 - 删除：同时删除 R2 图片、D1 记录并刷新私有快照。
 - 置顶/加精：每个分类支持多张；结束时间留空表示永久，否则到期后自动停止展示标记和优先排序。
 - 图片读取：公开图片和原图下载会写入 Cloudflare 边缘缓存；重复访问优先命中缓存，减少 D1 查询和 R2 读取。
+- 网页标题图：后台可将任意一张图库照片设为或取消标题图；D1 仅保存照片 ID，R2 图片不会复制或改名。
