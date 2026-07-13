@@ -3,3 +3,4 @@
   "include": ["/api/*", "/gallery/*", "/admin", "/admin/*"],
   "exclude": []
 }
+

@@ -228,7 +228,7 @@ dialog::backdrop { background: rgba(76, 49, 58, 0.55); backdrop-filter: blur(5px
 .category-manager-list { display: grid; gap: 8px; max-height: min(58vh, 560px); overflow: auto; }
 .category-manager-row {
   display: grid;
-  grid-template-columns: minmax(150px, 1fr) auto auto auto auto auto auto;
+  grid-template-columns: minmax(150px, 1fr) auto auto auto auto auto;
   gap: 7px;
   align-items: center;
   padding: 9px;
@@ -242,6 +242,7 @@ dialog::backdrop { background: rgba(76, 49, 58, 0.55); backdrop-filter: blur(5px
 .category-manager-row .category-count { min-width: 48px; color: var(--muted); font-size: 10px; text-align: right; }
 .category-manager-row button { padding: 7px 9px; font-size: 11px; }
 .category-manager-note { margin-top: 12px; }
+.category-manager-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
 
 .toast {
   position: fixed;

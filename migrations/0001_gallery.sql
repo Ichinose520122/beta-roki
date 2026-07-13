@@ -27,3 +27,4 @@ CREATE TABLE IF NOT EXISTS gallery_snapshots (
   payload TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+

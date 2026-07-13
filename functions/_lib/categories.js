@@ -65,3 +65,4 @@ export async function findCategory(db, value) {
 export async function normalizeCategoryId(db, value) {
   return (await findCategory(db, value))?.id || null;
 }
+

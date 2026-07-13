@@ -6,6 +6,21 @@ export async function onRequestGet(context) {
     const id = String(context.params.id || "");
     if (!/^[a-zA-Z0-9-]{12,64}$/.test(id)) return new Response("Not found", { status: 404 });
 
+    const requestUrl = new URL(context.request.url);
+    const download = requestUrl.searchParams.get("download") === "1";
+    const url = new URL(requestUrl.pathname, requestUrl.origin);
+    if (download) url.searchParams.set("download", "1");
+    const cache = caches.default;
+    const cacheKey = new Request(url.toString(), { method: "GET" });
+    const cached = await cache.match(cacheKey);
+    if (cached) {
+      const cachedEtag = cached.headers.get("ETag");
+      if (cachedEtag && context.request.headers.get("If-None-Match") === cachedEtag) {
+        return new Response(null, { status: 304, headers: { ETag: cachedEtag } });
+      }
+      return cached;
+    }
+
     const row = await context.env.DB.prepare(
       "SELECT object_key, content_type, shot_at, title FROM gallery_items WHERE id = ?1",
     )
@@ -25,14 +40,17 @@ export async function onRequestGet(context) {
     object.writeHttpMetadata(headers);
     headers.set("Content-Type", headers.get("Content-Type") || row.content_type || "image/webp");
     headers.set("Cache-Control", "public, max-age=31536000, immutable");
+    headers.set("CDN-Cache-Control", "public, max-age=31536000, immutable");
     headers.set("X-Content-Type-Options", "nosniff");
-    if (new URL(context.request.url).searchParams.get("download") === "1") {
+    if (download) {
       const extension = String(row.object_key || "").split(".").pop() || "image";
       const filename = `${String(row.shot_at || id).replace(/[: ]/g, "-")}-${id}.${extension}`;
       headers.set("Content-Disposition", `attachment; filename="${filename}"`);
     }
     if (etag) headers.set("ETag", etag);
-    return new Response(object.body, { headers });
+    const response = new Response(object.body, { headers });
+    context.waitUntil(cache.put(cacheKey, response.clone()));
+    return response;
   } catch (error) {
     console.error(error);
     return new Response("Image service unavailable", { status: 503 });

@@ -6,7 +6,7 @@
     <meta name="robots" content="noindex, nofollow" />
     <title>图库管理 · 一ノ瀬林檎的小洛克冒险之旅</title>
     <link rel="stylesheet" href="./admin.css" />
-    <script src="./admin.js?v=20260712-batch-upload" defer></script>
+    <script src="./admin.js?v=20260713-staged-editor" defer></script>
   </head>
   <body>
     <header class="admin-header">
@@ -94,6 +94,10 @@
 
         <div class="category-manager-list" id="category-manager-list"></div>
         <p class="category-manager-note">有图片的分组需要先使用“整组迁移”，清空后才能删除。</p>
+        <footer class="category-manager-footer">
+          <button type="button" data-close="category-dialog">取消</button>
+          <button class="primary" id="apply-category-settings" type="button" disabled>确定应用</button>
+        </footer>
       </section>
     </dialog>
 

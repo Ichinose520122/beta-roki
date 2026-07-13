@@ -9,6 +9,7 @@ const state = {
   importFile: null,
   selectedIds: new Set(),
   editOriginal: null,
+  categoryDrafts: [],
 };
 
 const UPLOAD_CONCURRENCY = 4;
@@ -34,6 +35,7 @@ const elements = {
   categoryDialog: document.querySelector("#category-dialog"),
   categoryCreateForm: document.querySelector("#category-create-form"),
   categoryManagerList: document.querySelector("#category-manager-list"),
+  applyCategorySettings: document.querySelector("#apply-category-settings"),
   moveDialog: document.querySelector("#move-dialog"),
   moveForm: document.querySelector("#move-form"),
   uploadDialog: document.querySelector("#upload-dialog"),
@@ -75,7 +77,7 @@ async function loadGallery() {
     elements.adminEmail.textContent = data.admin || "";
     populateCategories();
     render();
-    if (elements.categoryDialog.open) renderCategoryManager();
+    if (elements.categoryDialog.open) startCategoryDraft();
   } catch (error) {
     showToast(error.message, true);
     elements.summary.textContent = "后台数据读取失败";
@@ -254,7 +256,7 @@ function bindControls() {
 
   elements.openUpload.addEventListener("click", () => elements.uploadDialog.showModal());
   elements.openCategories.addEventListener("click", () => {
-    renderCategoryManager();
+    startCategoryDraft();
     elements.categoryDialog.showModal();
   });
   elements.openMove.addEventListener("click", () => {
@@ -309,11 +311,32 @@ function bindControls() {
   elements.moveForm.elements.fromCategory.addEventListener("change", syncMoveTargets);
   elements.moveForm.addEventListener("submit", moveCategory);
   elements.categoryCreateForm.addEventListener("submit", createCategory);
+  elements.applyCategorySettings.addEventListener("click", applyCategorySettings);
+}
+
+function startCategoryDraft() {
+  state.categoryDrafts = state.categories.map((category) => ({ ...category }));
+  renderCategoryManager();
+}
+
+function categoryDraftChanged() {
+  if (state.categoryDrafts.length !== state.categories.length) return true;
+  return state.categoryDrafts.some((draft, index) => {
+    const original = state.categories[index];
+    return !original
+      || draft.id !== original.id
+      || draft.name.trim() !== original.name
+      || draft.visible !== original.visible;
+  });
+}
+
+function syncCategoryApplyState() {
+  elements.applyCategorySettings.disabled = !categoryDraftChanged();
 }
 
 function renderCategoryManager() {
   elements.categoryManagerList.replaceChildren();
-  state.categories.forEach((category, index) => {
+  state.categoryDrafts.forEach((category, index) => {
     const row = document.createElement("article");
     row.className = "category-manager-row";
 
@@ -322,12 +345,20 @@ function renderCategoryManager() {
     name.maxLength = 60;
     name.value = category.name;
     name.setAttribute("aria-label", `${category.name}的分组名称`);
+    name.addEventListener("input", () => {
+      category.name = name.value;
+      syncCategoryApplyState();
+    });
 
     const visibleLabel = document.createElement("label");
     visibleLabel.className = "category-visible";
     const visible = document.createElement("input");
     visible.type = "checkbox";
     visible.checked = category.visible;
+    visible.addEventListener("change", () => {
+      category.visible = visible.checked;
+      syncCategoryApplyState();
+    });
     visibleLabel.append(visible, document.createTextNode("公开显示"));
 
     const count = document.createElement("span");
@@ -345,13 +376,8 @@ function renderCategoryManager() {
     down.type = "button";
     down.textContent = "↓";
     down.title = "向下移动";
-    down.disabled = index === state.categories.length - 1;
+    down.disabled = index === state.categoryDrafts.length - 1;
     down.addEventListener("click", () => reorderCategory(index, index + 1));
-
-    const save = document.createElement("button");
-    save.type = "button";
-    save.textContent = "保存";
-    save.addEventListener("click", () => saveCategory(category, name.value, visible.checked, save));
 
     const remove = document.createElement("button");
     remove.type = "button";
@@ -361,13 +387,18 @@ function renderCategoryManager() {
     remove.title = remove.disabled ? "请先迁移这个分组中的图片" : "删除空分组";
     remove.addEventListener("click", () => deleteCategory(category, remove));
 
-    row.append(name, visibleLabel, count, up, down, save, remove);
+    row.append(name, visibleLabel, count, up, down, remove);
     elements.categoryManagerList.append(row);
   });
+  syncCategoryApplyState();
 }
 
 async function createCategory(event) {
   event.preventDefault();
+  if (categoryDraftChanged()) {
+    showToast("请先确定应用或取消当前分组修改", true);
+    return;
+  }
   const submit = event.submitter;
   const name = elements.categoryCreateForm.elements.name.value.trim();
   if (!name) return;
@@ -388,47 +419,46 @@ async function createCategory(event) {
   }
 }
 
-async function saveCategory(category, nameValue, visible, button) {
-  const name = nameValue.trim();
-  if (!name) {
+async function applyCategorySettings() {
+  if (!categoryDraftChanged()) return;
+  const categories = state.categoryDrafts.map((category) => ({
+    id: category.id,
+    name: category.name.trim(),
+    visible: category.visible,
+  }));
+  if (categories.some((category) => !category.name)) {
     showToast("分组名称不能为空", true);
     return;
   }
-  button.disabled = true;
+  elements.applyCategorySettings.disabled = true;
   try {
-    await request(`/api/admin/categories/${encodeURIComponent(category.id)}`, {
-      method: "PATCH",
+    await request("/api/admin/category-settings", {
+      method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, visible }),
+      body: JSON.stringify({ categories }),
     });
     await loadGallery();
-    showToast("分组设置已保存");
+    elements.categoryDialog.close();
+    showToast("分组名称、显示状态和顺序已一次性应用");
   } catch (error) {
     showToast(error.message, true);
   } finally {
-    button.disabled = false;
+    syncCategoryApplyState();
   }
 }
 
-async function reorderCategory(fromIndex, toIndex) {
-  if (toIndex < 0 || toIndex >= state.categories.length) return;
-  const ids = state.categories.map((category) => category.id);
-  const [moved] = ids.splice(fromIndex, 1);
-  ids.splice(toIndex, 0, moved);
-  try {
-    await request("/api/admin/category-order", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids }),
-    });
-    await loadGallery();
-    showToast("分组顺序已更新");
-  } catch (error) {
-    showToast(error.message, true);
-  }
+function reorderCategory(fromIndex, toIndex) {
+  if (toIndex < 0 || toIndex >= state.categoryDrafts.length) return;
+  const [moved] = state.categoryDrafts.splice(fromIndex, 1);
+  state.categoryDrafts.splice(toIndex, 0, moved);
+  renderCategoryManager();
 }
 
 async function deleteCategory(category, button) {
+  if (categoryDraftChanged()) {
+    showToast("请先确定应用或取消当前分组修改", true);
+    return;
+  }
   if (!confirm(`确定删除空分组“${category.name}”吗？`)) return;
   button.disabled = true;
   try {
@@ -595,7 +625,7 @@ async function submitUpload(event) {
 
   const originalText = submit.textContent;
   let uploaded = 0;
-  let finished = 0;
+  let completed = 0;
   const failures = [];
   const fallbackTime = fromLocalInput(
     elements.uploadForm.elements.time.value,
@@ -623,10 +653,8 @@ async function submitUpload(event) {
       String(elements.uploadForm.elements.featuredEnabled.checked),
     );
 
-    const uploadOne = async (file, index) => {
-      finished += 1;
-      submit.textContent = `正在上传 ${finished}/${files.length}`;
-
+    submit.textContent = `正在并发上传 0/${files.length}`;
+    const uploadOne = async (file) => {
       const screenshotTime =
         parseScreenshotTimeFromFilename(file.name)
         || fallbackTime;
@@ -636,6 +664,8 @@ async function submitUpload(event) {
           name: file.name,
           message: "无法从文件名读取时间，且未填写备用截图时间",
         });
+        completed += 1;
+        submit.textContent = `正在并发上传 ${completed}/${files.length}`;
         return;
       }
 
@@ -648,6 +678,7 @@ async function submitUpload(event) {
       form.set("file", file, file.name);
       form.set("time", screenshotTime);
       form.set("refreshSnapshot", "false");
+      form.set("minimalResponse", "true");
 
       try {
         await request("/api/admin/upload", {
@@ -661,6 +692,9 @@ async function submitUpload(event) {
           name: file.name,
           message: error.message,
         });
+      } finally {
+        completed += 1;
+        submit.textContent = `正在并发上传 ${completed}/${files.length}`;
       }
     };
 

@@ -10,3 +10,4 @@ CREATE TABLE IF NOT EXISTS gallery_categories (
 
 CREATE INDEX IF NOT EXISTS gallery_categories_order_idx
   ON gallery_categories(sort_order, created_at);
+

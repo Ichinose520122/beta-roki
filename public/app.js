@@ -386,3 +386,4 @@ function showFatalError(message) {
   elements.empty.querySelector("p").textContent = message;
   elements.summary.textContent = "无法连接图库服务";
 }
+

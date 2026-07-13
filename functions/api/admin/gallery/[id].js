@@ -78,6 +78,8 @@ export async function onRequestPatch(context) {
       .bind(id)
       .first();
     const categories = await listCategories(context.env.DB);
+    const imageUrl = new URL(`/gallery/${encodeURIComponent(id)}?download=1`, context.request.url);
+    context.waitUntil(caches.default.delete(new Request(imageUrl.toString())));
     return json({ ok: true, image: adminItem(updated, categories) });
   } catch (error) {
     console.error(error);
@@ -102,6 +104,13 @@ export async function onRequestDelete(context) {
     await context.env.GALLERY_BUCKET.delete(current.object_key);
     await context.env.DB.prepare("DELETE FROM gallery_items WHERE id = ?1").bind(id).run();
     await writePrivateGallerySnapshot(context.env);
+    const imageUrl = new URL(`/gallery/${encodeURIComponent(id)}`, context.request.url);
+    const downloadUrl = new URL(imageUrl.toString());
+    downloadUrl.searchParams.set("download", "1");
+    context.waitUntil(Promise.all([
+      caches.default.delete(new Request(imageUrl.toString())),
+      caches.default.delete(new Request(downloadUrl.toString())),
+    ]));
     return json({ ok: true, deletedId: id });
   } catch (error) {
     console.error(error);

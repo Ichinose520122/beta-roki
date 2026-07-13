@@ -84,6 +84,9 @@ export async function onRequestPost(context) {
       .run();
 
     if (refreshSnapshot) await writePrivateGallerySnapshot(context.env);
+    if (form.get("minimalResponse") === "true") {
+      return json({ ok: true, id }, { status: 201 });
+    }
     const row = await context.env.DB.prepare("SELECT * FROM gallery_items WHERE id = ?1")
       .bind(id)
       .first();
