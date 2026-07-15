@@ -6,8 +6,8 @@
     <meta name="description" content="一ノ瀬林檎的小洛克冒险之旅" />
     <meta name="theme-color" content="#fff7f1" />
     <title>一ノ瀬林檎的小洛克冒险之旅</title>
-    <link rel="stylesheet" href="./style.css?v=20260716-mobile-toolbar-v11" />
-    <script src="./app.js?v=20260716-fixed-comments-v9" defer></script>
+    <link rel="stylesheet" href="./style.css?v=20260716-desktop-comments-v13" />
+    <script src="./app.js?v=20260716-no-comment-loading-v12" defer></script>
   </head>
   <body>
     <header class="app-header">
@@ -132,7 +132,9 @@
                 <button class="comments-login" id="comments-login" type="button">好友登录</button>
               </header>
               <p class="comments-status" id="comments-status" aria-live="polite"></p>
-              <div class="comments-list" id="comments-list"></div>
+              <div class="comments-list" id="comments-list">
+                <p class="comments-empty">还没有留言，来写下第一张小纸条吧。</p>
+              </div>
               <form class="comment-form" id="comment-form" hidden>
                 <label for="comment-content">写下对这张照片的留言</label>
                 <textarea id="comment-content" name="content" maxlength="500" rows="3" required placeholder="说说你喜欢这个瞬间的哪里…"></textarea>
