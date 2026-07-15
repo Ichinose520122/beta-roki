@@ -69,7 +69,7 @@ document.addEventListener("DOMContentLoaded", init);
 async function init() {
   bindControls();
   const [galleryResult, sessionResult] = await Promise.allSettled([
-    requestJson(CONFIG.galleryApi, { cache: "no-cache" }),
+    requestJson(CONFIG.galleryApi),
     requestJson(CONFIG.friendSessionApi, { cache: "no-store" }),
   ]);
 

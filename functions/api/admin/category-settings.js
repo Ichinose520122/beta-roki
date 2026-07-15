@@ -1,5 +1,5 @@
 import { listCategories } from "../../_lib/categories.js";
-import { ensureSchema, writePrivateGallerySnapshot } from "../../_lib/db.js";
+import { ensureSchema, invalidateGalleryDerivedData } from "../../_lib/db.js";
 import { apiError, cleanText, json, requireSameOrigin } from "../../_lib/http.js";
 
 export async function onRequestPost(context) {
@@ -61,7 +61,7 @@ export async function onRequestPost(context) {
     ));
 
     await context.env.DB.batch([...temporaryUpdates, ...finalUpdates]);
-    await writePrivateGallerySnapshot(context.env);
+    await invalidateGalleryDerivedData(context);
     return json({ ok: true, categories });
   } catch (error) {
     console.error(error);

@@ -63,6 +63,11 @@ export async function findCategory(db, value) {
 }
 
 export async function normalizeCategoryId(db, value) {
-  return (await findCategory(db, value))?.id || null;
+  const target = String(value || "").trim();
+  if (!target) return null;
+  const direct = await db.prepare(
+    "SELECT id FROM gallery_categories WHERE id = ?1",
+  ).bind(target).first();
+  if (direct?.id) return String(direct.id);
+  return (await findCategory(db, target))?.id || null;
 }
-

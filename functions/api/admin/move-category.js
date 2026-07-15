@@ -1,5 +1,5 @@
-import { findCategory } from "../../_lib/categories.js";
-import { ensureSchema, writePrivateGallerySnapshot } from "../../_lib/db.js";
+import { findCategoryInList, listCategories } from "../../_lib/categories.js";
+import { ensureSchema, invalidateGalleryDerivedData } from "../../_lib/db.js";
 import { apiError, cleanText, json, requireSameOrigin } from "../../_lib/http.js";
 
 export async function onRequestPost(context) {
@@ -9,8 +9,9 @@ export async function onRequestPost(context) {
   try {
     await ensureSchema(context.env.DB);
     const body = await context.request.json();
-    const fromDefinition = await findCategory(context.env.DB, cleanText(body.fromCategory, 80));
-    const toDefinition = await findCategory(context.env.DB, cleanText(body.toCategory, 80));
+    const categories = await listCategories(context.env.DB);
+    const fromDefinition = findCategoryInList(categories, cleanText(body.fromCategory, 80));
+    const toDefinition = findCategoryInList(categories, cleanText(body.toCategory, 80));
     const fromCategory = fromDefinition?.id || null;
     const toCategory = toDefinition?.id || null;
 
@@ -29,11 +30,10 @@ export async function onRequestPost(context) {
       .run();
 
     const moved = Number(result.meta?.changes || 0);
-    if (moved > 0) await writePrivateGallerySnapshot(context.env);
+    if (moved > 0) await invalidateGalleryDerivedData(context);
     return json({ ok: true, moved, fromCategory, toCategory });
   } catch (error) {
     console.error(error);
     return apiError("整组迁移失败", 500);
   }
 }
-

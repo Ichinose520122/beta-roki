@@ -80,6 +80,10 @@ function readCookie(request, name) {
   return "";
 }
 
+export function hasFriendSessionCookie(request) {
+  return Boolean(readCookie(request, COOKIE_NAME));
+}
+
 function sessionDays(env) {
   const value = Number(env.FRIEND_SESSION_DAYS || DEFAULT_SESSION_DAYS);
   return Number.isFinite(value) ? Math.max(1, Math.min(90, Math.round(value))) : DEFAULT_SESSION_DAYS;

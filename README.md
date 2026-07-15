@@ -20,7 +20,7 @@ migrations/             D1 数据库结构
 
 - R2：保存图片文件。
 - D1：保存分类、截图时间、标题、评论、标签、置顶和加精信息。
-- D1 私有快照：每次修改后自动生成完整 `gallery.json`，可在后台下载。
+- D1 私有快照：图库变化后自动失效，下载导出时按当前 D1 数据生成最新 `gallery.json`。
 
 公开网页不会收到桶名、R2 对象键或原始文件名，只会收到 `/gallery/{ID}`。
 
@@ -34,11 +34,13 @@ npx wrangler d1 execute ringo-rock-gallery --remote --file=./migrations/0001_gal
 npx wrangler d1 execute ringo-rock-gallery --remote --file=./migrations/0002_categories.sql
 npx wrangler d1 execute ringo-rock-gallery --remote --file=./migrations/0003_settings.sql
 npx wrangler d1 execute ringo-rock-gallery --remote --file=./migrations/0004_friends_comments.sql
+npx wrangler d1 execute ringo-rock-gallery --remote --file=./migrations/0005_performance.sql
 ```
 
 已经部署过旧版本时不必手动执行 `0002_categories.sql`：新版 Functions 首次访问会自动创建分组表、写入现有 6 个分组，并把旧中文分组值迁移为稳定 ID。
 `0003_settings.sql` 同样会由新版 Functions 自动创建，用于保存网页标题图等站点设置。
 `0004_friends_comments.sql` 用于好友名单、登录会话和照片留言；已经上线的数据库也会在新版 Functions 首次访问时自动补建，不要求本地运行 `npx`。
+`0005_performance.sql` 增加留言和会话索引及运行时结构版本；未手动执行时，新版 Functions 也会安全地自动补建一次，之后不会在每次冷启动重复执行整套迁移。
 
 ### 2. 给 Pages 项目添加绑定
 
@@ -89,12 +91,12 @@ npx wrangler pages deploy public --project-name 你的Pages项目名
 
 - 批量上传：浏览器同时运行最多 4 个上传任务；每张图分别写入 R2 和 D1，整批完成后只刷新一次私有 gallery 快照。
 - 编辑：表单中的修改只保存在浏览器中，点击“保存修改”后才发送一次 D1 更新请求；没有变化时不会发送请求。
-- 批量编辑：可多选图片后统一移动分组、设为或取消精选、置顶或取消置顶，并刷新私有快照。
-- 分组管理：改名、公开显示/隐藏及上下排序先在浏览器中暂存，点击“确定应用”后一次写入 D1、一次刷新快照；有图片的分组必须先迁移图片才能删除。
-- 整组迁移：把来源组的全部图片记录改到目标组并刷新私有快照；R2 对象键保持不变。
-- 删除：同时删除 R2 图片、D1 记录并刷新私有快照。
+- 批量编辑：可多选图片后统一移动分组、设为或取消精选、置顶或取消置顶；已有私有快照会标记失效。
+- 分组管理：改名、公开显示/隐藏及上下排序先在浏览器中暂存，点击“确定应用”后一次写入 D1；有图片的分组必须先迁移图片才能删除。
+- 整组迁移：把来源组的全部图片记录改到目标组；R2 对象键保持不变。
+- 删除：同时删除 R2 图片和 D1 记录，并让旧私有快照失效。
 - 置顶/加精：每个分类支持多张；结束时间留空表示永久，否则到期后自动停止展示标记和优先排序。
-- 图片读取：公开图片和原图下载会写入 Cloudflare 边缘缓存；重复访问优先命中缓存，减少 D1 查询和 R2 读取。
+- 图片读取：公共图库数据、公开图片和原图下载会写入 Cloudflare 边缘缓存；重复访问优先命中缓存，减少 D1 查询和 R2 读取。
 - 网页标题图：后台可将任意一张图库照片设为或取消标题图；D1 仅保存照片 ID，R2 图片不会复制或改名。
 - 标题图模式：支持固定照片、从当前有效的精选照片随机选择、从全部公开照片随机选择；前台标题横幅居中裁切填充，并优先于普通图库图片加载。
 - 最近更新：公开图库自动生成虚拟分组，按实际上传时间显示最近 30 或 50 张，不复制 R2 文件，也不改变原分组。

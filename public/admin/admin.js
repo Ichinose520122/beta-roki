@@ -77,7 +77,9 @@ async function init() {
   bindControls();
   setDefaultUploadTime();
   await loadGallery();
-  window.setInterval(refreshCommentBadge, 60_000);
+  window.setInterval(() => {
+    if (!document.hidden) refreshCommentBadge();
+  }, 60_000);
 }
 
 async function request(url, options = {}) {

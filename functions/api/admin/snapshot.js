@@ -1,4 +1,8 @@
-import { ensureSchema, writePrivateGallerySnapshot } from "../../_lib/db.js";
+import {
+  ensureSchema,
+  invalidatePublicGalleryCache,
+  writePrivateGallerySnapshot,
+} from "../../_lib/db.js";
 import { apiError, json, requireSameOrigin } from "../../_lib/http.js";
 
 export async function onRequestPost(context) {
@@ -8,6 +12,7 @@ export async function onRequestPost(context) {
   try {
     await ensureSchema(context.env.DB);
     const snapshot = await writePrivateGallerySnapshot(context.env);
+    await invalidatePublicGalleryCache(context);
     return json({
       ok: true,
       updatedAt: snapshot.updatedAt,
@@ -18,4 +23,3 @@ export async function onRequestPost(context) {
     return apiError("刷新图库索引失败", 500);
   }
 }
-

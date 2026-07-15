@@ -1,8 +1,8 @@
 import {
   ensureSchema,
-  getSetting,
+  getSettings,
+  invalidateGalleryDerivedData,
   setSetting,
-  writePrivateGallerySnapshot,
 } from "../../_lib/db.js";
 import { apiError, cleanText, json, requireSameOrigin } from "../../_lib/http.js";
 
@@ -13,11 +13,13 @@ export async function onRequestPost(context) {
   try {
     await ensureSchema(context.env.DB);
     const body = await context.request.json();
-    const [currentHeroImageId, currentHeroMode, currentRecentLimit] = await Promise.all([
-      getSetting(context.env.DB, "hero_image_id"),
-      getSetting(context.env.DB, "hero_mode"),
-      getSetting(context.env.DB, "recent_limit"),
-    ]);
+    const settings = await getSettings(
+      context.env.DB,
+      ["hero_image_id", "hero_mode", "recent_limit"],
+    );
+    const currentHeroImageId = settings.hero_image_id || "";
+    const currentHeroMode = settings.hero_mode || "";
+    const currentRecentLimit = settings.recent_limit || "";
     const heroImageId = body.heroImageId === undefined
       ? currentHeroImageId
       : cleanText(body.heroImageId, 64);
@@ -42,7 +44,7 @@ export async function onRequestPost(context) {
     await setSetting(context.env.DB, "hero_image_id", heroImageId);
     await setSetting(context.env.DB, "hero_mode", heroMode);
     await setSetting(context.env.DB, "recent_limit", String(recentLimit));
-    await writePrivateGallerySnapshot(context.env);
+    await invalidateGalleryDerivedData(context);
     return json({ ok: true, settings: { heroImageId, heroMode, recentLimit } });
   } catch (error) {
     console.error(error);

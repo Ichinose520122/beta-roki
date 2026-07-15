@@ -2,7 +2,6 @@ import { ensureSchema } from "../_lib/db.js";
 
 export async function onRequestGet(context) {
   try {
-    await ensureSchema(context.env.DB);
     const id = String(context.params.id || "");
     if (!/^[a-zA-Z0-9-]{12,64}$/.test(id)) return new Response("Not found", { status: 404 });
 
@@ -21,6 +20,7 @@ export async function onRequestGet(context) {
       return cached;
     }
 
+    await ensureSchema(context.env.DB);
     const row = await context.env.DB.prepare(
       "SELECT object_key, content_type, shot_at, title FROM gallery_items WHERE id = ?1",
     )

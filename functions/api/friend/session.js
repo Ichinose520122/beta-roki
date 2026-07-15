@@ -5,6 +5,7 @@ import {
   createFriendSession,
   deleteCurrentFriendSession,
   getFriendSession,
+  hasFriendSessionCookie,
   hashLoginIdentity,
   hashStudentId,
   loginIsBlocked,
@@ -16,6 +17,14 @@ import { apiError, cleanText, json, requireSameOrigin } from "../../_lib/http.js
 
 export async function onRequestGet(context) {
   try {
+    if (!hasFriendSessionCookie(context.request)) {
+      return json({
+        ok: true,
+        authenticated: false,
+        friend: null,
+        expiresAt: null,
+      }, { headers: { "Cache-Control": "no-store" } });
+    }
     await ensureSchema(context.env.DB);
     const session = await getFriendSession(context);
     return json({

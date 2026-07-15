@@ -1,5 +1,5 @@
 import { findCategory } from "../../../_lib/categories.js";
-import { ensureSchema, writePrivateGallerySnapshot } from "../../../_lib/db.js";
+import { ensureSchema, invalidateGalleryDerivedData } from "../../../_lib/db.js";
 import { apiError, cleanText, json, requireSameOrigin } from "../../../_lib/http.js";
 
 export async function onRequestPatch(context) {
@@ -28,7 +28,7 @@ export async function onRequestPatch(context) {
        SET name = ?1, is_visible = ?2, updated_at = ?3
        WHERE id = ?4`,
     ).bind(name, visible ? 1 : 0, now, id).run();
-    await writePrivateGallerySnapshot(context.env);
+    await invalidateGalleryDerivedData(context);
     return json({ ok: true, id, name, visible });
   } catch (error) {
     console.error(error);
@@ -62,11 +62,10 @@ export async function onRequestDelete(context) {
     if (Number(totalRow?.total || 0) <= 1) return apiError("至少需要保留一个分组", 409);
 
     await context.env.DB.prepare("DELETE FROM gallery_categories WHERE id = ?1").bind(id).run();
-    await writePrivateGallerySnapshot(context.env);
+    await invalidateGalleryDerivedData(context);
     return json({ ok: true, deletedId: id });
   } catch (error) {
     console.error(error);
     return apiError("删除分组失败", 500);
   }
 }
-

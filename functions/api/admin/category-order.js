@@ -1,5 +1,5 @@
 import { listCategories } from "../../_lib/categories.js";
-import { ensureSchema, writePrivateGallerySnapshot } from "../../_lib/db.js";
+import { ensureSchema, invalidateGalleryDerivedData } from "../../_lib/db.js";
 import { apiError, json, requireSameOrigin } from "../../_lib/http.js";
 
 export async function onRequestPost(context) {
@@ -21,11 +21,10 @@ export async function onRequestPost(context) {
     await context.env.DB.batch(ids.map((id, index) => context.env.DB.prepare(
       "UPDATE gallery_categories SET sort_order = ?1, updated_at = ?2 WHERE id = ?3",
     ).bind((index + 1) * 10, now, id)));
-    await writePrivateGallerySnapshot(context.env);
+    await invalidateGalleryDerivedData(context);
     return json({ ok: true, ids });
   } catch (error) {
     console.error(error);
     return apiError("调整分组顺序失败", 500);
   }
 }
-

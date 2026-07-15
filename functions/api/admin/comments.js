@@ -28,11 +28,17 @@ async function commentCounts(db) {
 export async function onRequestGet(context) {
   try {
     await ensureSchema(context.env.DB);
-    const counts = await commentCounts(context.env.DB);
     const summaryOnly = new URL(context.request.url).searchParams.get("summary") === "1";
     if (summaryOnly) {
-      return json({ ok: true, ...counts }, { headers: { "Cache-Control": "no-store" } });
+      const unreadRow = await context.env.DB.prepare(
+        "SELECT COUNT(*) AS unread FROM photo_comments WHERE is_read = 0",
+      ).first();
+      return json({
+        ok: true,
+        unreadCount: Number(unreadRow?.unread || 0),
+      }, { headers: { "Cache-Control": "no-store" } });
     }
+    const counts = await commentCounts(context.env.DB);
     const rows = await context.env.DB.prepare(
       `SELECT
          c.*,

@@ -1,5 +1,10 @@
 import { listCategories, normalizeCategoryId } from "../../_lib/categories.js";
-import { adminItem, ensureSchema, writePrivateGallerySnapshot } from "../../_lib/db.js";
+import {
+  adminItem,
+  ensureSchema,
+  invalidatePublicGalleryCache,
+  writePrivateGallerySnapshot,
+} from "../../_lib/db.js";
 import {
   apiError,
   cleanText,
@@ -83,7 +88,10 @@ export async function onRequestPost(context) {
       )
       .run();
 
-    if (refreshSnapshot) await writePrivateGallerySnapshot(context.env);
+    if (refreshSnapshot) {
+      await writePrivateGallerySnapshot(context.env);
+      await invalidatePublicGalleryCache(context);
+    }
     if (form.get("minimalResponse") === "true") {
       return json({ ok: true, id }, { status: 201 });
     }

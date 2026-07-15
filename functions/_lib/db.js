@@ -5,6 +5,7 @@ import {
 } from "./categories.js";
 
 const initialized = new WeakMap();
+const RUNTIME_SCHEMA_VERSION = "2026-07-performance-v1";
 
 const TABLE_SQL = `CREATE TABLE IF NOT EXISTS gallery_items (
   id TEXT PRIMARY KEY,
@@ -91,12 +92,29 @@ const FRIEND_NAME_INDEX_SQL =
   "CREATE INDEX IF NOT EXISTS gallery_friends_name_idx ON gallery_friends(normalized_name, is_active)";
 const FRIEND_SESSION_INDEX_SQL =
   "CREATE INDEX IF NOT EXISTS friend_sessions_friend_idx ON friend_sessions(friend_id, expires_at)";
+const FRIEND_SESSION_EXPIRES_INDEX_SQL =
+  "CREATE INDEX IF NOT EXISTS friend_sessions_expires_idx ON friend_sessions(expires_at)";
 const COMMENT_IMAGE_INDEX_SQL =
   "CREATE INDEX IF NOT EXISTS photo_comments_image_idx ON photo_comments(image_id, created_at DESC)";
 const COMMENT_UNREAD_INDEX_SQL =
   "CREATE INDEX IF NOT EXISTS photo_comments_unread_idx ON photo_comments(is_read, created_at DESC)";
+const COMMENT_FRIEND_INDEX_SQL =
+  "CREATE INDEX IF NOT EXISTS photo_comments_friend_created_idx ON photo_comments(friend_id, created_at DESC)";
+
+async function schemaIsCurrent(db) {
+  try {
+    const row = await db.prepare(
+      "SELECT value FROM gallery_settings WHERE key = 'runtime_schema_version'",
+    ).first();
+    return row?.value === RUNTIME_SCHEMA_VERSION;
+  } catch {
+    return false;
+  }
+}
 
 async function initializeSchema(db) {
+  if (await schemaIsCurrent(db)) return;
+
   await db.batch([
     db.prepare(TABLE_SQL),
     db.prepare(CATEGORIES_TABLE_SQL),
@@ -111,8 +129,10 @@ async function initializeSchema(db) {
     db.prepare(LOGIN_ATTEMPTS_TABLE_SQL),
     db.prepare(FRIEND_NAME_INDEX_SQL),
     db.prepare(FRIEND_SESSION_INDEX_SQL),
+    db.prepare(FRIEND_SESSION_EXPIRES_INDEX_SQL),
     db.prepare(COMMENT_IMAGE_INDEX_SQL),
     db.prepare(COMMENT_UNREAD_INDEX_SQL),
+    db.prepare(COMMENT_FRIEND_INDEX_SQL),
   ]);
 
   const now = new Date().toISOString();
@@ -130,17 +150,32 @@ async function initializeSchema(db) {
   )));
 
   await db.batch(DEFAULT_CATEGORIES.map((category) => {
-    const legacyValues = [category.id, category.name, ...category.aliases];
+    const legacyValues = [category.name, ...category.aliases];
     const placeholders = legacyValues.map((_, index) => `?${index + 2}`).join(", ");
     return db.prepare(
-      `UPDATE gallery_items SET category = ?1 WHERE category IN (${placeholders})`,
+      `UPDATE gallery_items
+       SET category = ?1
+       WHERE category <> ?1 AND category IN (${placeholders})`,
     ).bind(category.id, ...legacyValues);
   }));
+
+  const versionedAt = new Date().toISOString();
+  await db.prepare(
+    `INSERT INTO gallery_settings (key, value, updated_at)
+     VALUES ('runtime_schema_version', ?1, ?2)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+  ).bind(RUNTIME_SCHEMA_VERSION, versionedAt).run();
 }
 
 export async function ensureSchema(db) {
   if (!db) throw new Error("缺少 D1 绑定 DB");
-  if (!initialized.has(db)) initialized.set(db, initializeSchema(db));
+  if (!initialized.has(db)) {
+    const initialization = initializeSchema(db).catch((error) => {
+      initialized.delete(db);
+      throw error;
+    });
+    initialized.set(db, initialization);
+  }
   await initialized.get(db);
 }
 
@@ -276,6 +311,18 @@ export async function getSetting(db, key) {
   return row?.value ? String(row.value) : "";
 }
 
+export async function getSettings(db, keys) {
+  const normalizedKeys = [...new Set((keys || []).map(String).filter(Boolean))];
+  if (!normalizedKeys.length) return {};
+  const placeholders = normalizedKeys.map((_, index) => `?${index + 1}`).join(", ");
+  const result = await db.prepare(
+    `SELECT key, value FROM gallery_settings WHERE key IN (${placeholders})`,
+  ).bind(...normalizedKeys).all();
+  return Object.fromEntries(
+    (result.results || []).map((row) => [String(row.key), String(row.value)]),
+  );
+}
+
 export async function setSetting(db, key, value) {
   const normalizedKey = String(key);
   const normalizedValue = String(value || "");
@@ -295,13 +342,14 @@ export async function setSetting(db, key, value) {
 }
 
 export async function writePrivateGallerySnapshot(env) {
-  const [rows, categories, heroImageId, heroMode, recentLimit] = await Promise.all([
+  const [rows, categories, settings] = await Promise.all([
     listRows(env.DB, true),
     listCategories(env.DB),
-    getSetting(env.DB, "hero_image_id"),
-    getSetting(env.DB, "hero_mode"),
-    getSetting(env.DB, "recent_limit"),
+    getSettings(env.DB, ["hero_image_id", "hero_mode", "recent_limit"]),
   ]);
+  const heroImageId = settings.hero_image_id || "";
+  const heroMode = settings.hero_mode || "";
+  const recentLimit = settings.recent_limit || "";
   const snapshot = {
     version: 4,
     updatedAt: new Date().toISOString(),
@@ -343,6 +391,51 @@ export async function writePrivateGallerySnapshot(env) {
     .bind(JSON.stringify(snapshot, null, 2), snapshot.updatedAt)
     .run();
   return snapshot;
+}
+
+export async function invalidatePrivateGallerySnapshot(env) {
+  await env.DB.prepare(
+    "DELETE FROM gallery_snapshots WHERE name = 'gallery.json'",
+  ).run();
+}
+
+export function publicGalleryCacheKey(request) {
+  const requestUrl = new URL(request.url);
+  return new Request(new URL("/api/gallery", requestUrl.origin).toString(), { method: "GET" });
+}
+
+export async function readPublicGalleryCache(request) {
+  try {
+    return await caches.default.match(publicGalleryCacheKey(request));
+  } catch {
+    return null;
+  }
+}
+
+export function storePublicGalleryCache(context, response) {
+  context.waitUntil((async () => {
+    try {
+      await caches.default.put(publicGalleryCacheKey(context.request), response.clone());
+    } catch (error) {
+      console.warn("Public gallery cache write skipped", error);
+    }
+  })());
+}
+
+export async function invalidatePublicGalleryCache(context) {
+  try {
+    return await caches.default.delete(publicGalleryCacheKey(context.request));
+  } catch (error) {
+    console.warn("Public gallery cache invalidation skipped", error);
+    return false;
+  }
+}
+
+export async function invalidateGalleryDerivedData(context) {
+  await Promise.all([
+    invalidatePrivateGallerySnapshot(context.env),
+    invalidatePublicGalleryCache(context),
+  ]);
 }
 
 export function buildPublicGallery(rows, categories, options = {}) {

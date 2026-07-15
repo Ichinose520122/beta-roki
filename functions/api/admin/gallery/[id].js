@@ -1,9 +1,9 @@
-import { listCategories, normalizeCategoryId } from "../../../_lib/categories.js";
+import { findCategoryInList, listCategories } from "../../../_lib/categories.js";
 import {
   adminItem,
   ensureSchema,
+  invalidateGalleryDerivedData,
   setSetting,
-  writePrivateGallerySnapshot,
 } from "../../../_lib/db.js";
 import {
   apiError,
@@ -28,10 +28,12 @@ export async function onRequestPatch(context) {
     if (!current) return apiError("图片不存在", 404);
 
     const body = await context.request.json();
-    const category = await normalizeCategoryId(
-      context.env.DB,
+    const categories = await listCategories(context.env.DB);
+    const categoryDefinition = findCategoryInList(
+      categories,
       cleanText(body.category ?? current.category, 80),
     );
+    const category = categoryDefinition?.id || null;
     const shotAt = validShotTime(body.time ?? current.shot_at);
     if (!category) return apiError("分类无效");
     if (!shotAt) return apiError("截图时间格式无效");
@@ -48,6 +50,13 @@ export async function onRequestPatch(context) {
       return apiError("置顶或加精时间格式无效");
     }
 
+    const title = cleanText(body.title ?? current.title, 160);
+    const comment = cleanText(body.comment ?? current.comment, 2000);
+    const tagsJson = JSON.stringify(normalizeTags(
+      body.tags ?? JSON.parse(current.tags_json || "[]"),
+    ));
+    const storedPinnedUntil = pinnedEnabled ? pinnedUntil : null;
+    const storedFeaturedUntil = featuredEnabled ? featuredUntil : null;
     const now = new Date().toISOString();
     await context.env.DB.prepare(
       `UPDATE gallery_items SET
@@ -65,24 +74,33 @@ export async function onRequestPatch(context) {
     )
       .bind(
         category,
-        cleanText(body.title ?? current.title, 160),
-        cleanText(body.comment ?? current.comment, 2000),
+        title,
+        comment,
         shotAt,
-        JSON.stringify(normalizeTags(body.tags ?? JSON.parse(current.tags_json || "[]"))),
+        tagsJson,
         pinnedEnabled ? 1 : 0,
-        pinnedEnabled ? pinnedUntil : null,
+        storedPinnedUntil,
         featuredEnabled ? 1 : 0,
-        featuredEnabled ? featuredUntil : null,
+        storedFeaturedUntil,
         now,
         id,
       )
       .run();
 
-    await writePrivateGallerySnapshot(context.env);
-    const updated = await context.env.DB.prepare("SELECT * FROM gallery_items WHERE id = ?1")
-      .bind(id)
-      .first();
-    const categories = await listCategories(context.env.DB);
+    await invalidateGalleryDerivedData(context);
+    const updated = {
+      ...current,
+      category,
+      title,
+      comment,
+      shot_at: shotAt,
+      tags_json: tagsJson,
+      is_pinned: pinnedEnabled ? 1 : 0,
+      pinned_until: storedPinnedUntil,
+      is_featured: featuredEnabled ? 1 : 0,
+      featured_until: storedFeaturedUntil,
+      updated_at: now,
+    };
     const imageUrl = new URL(`/gallery/${encodeURIComponent(id)}?download=1`, context.request.url);
     context.waitUntil(caches.default.delete(new Request(imageUrl.toString())));
     return json({ ok: true, image: adminItem(updated, categories) });
@@ -115,7 +133,7 @@ export async function onRequestDelete(context) {
       "SELECT value FROM gallery_settings WHERE key = 'hero_image_id'",
     ).first();
     if (heroSetting?.value === id) await setSetting(context.env.DB, "hero_image_id", "");
-    await writePrivateGallerySnapshot(context.env);
+    await invalidateGalleryDerivedData(context);
     const imageUrl = new URL(`/gallery/${encodeURIComponent(id)}`, context.request.url);
     const downloadUrl = new URL(imageUrl.toString());
     downloadUrl.searchParams.set("download", "1");

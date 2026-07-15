@@ -1,5 +1,5 @@
 import { normalizeCategoryId } from "../../_lib/categories.js";
-import { ensureSchema, writePrivateGallerySnapshot } from "../../_lib/db.js";
+import { ensureSchema, invalidateGalleryDerivedData } from "../../_lib/db.js";
 import {
   apiError,
   cleanText,
@@ -64,11 +64,10 @@ export async function onRequestPost(context) {
       });
     }
 
-    if (changed > 0) await writePrivateGallerySnapshot(context.env);
+    if (changed > 0) await invalidateGalleryDerivedData(context);
     return json({ ok: true, changed });
   } catch (error) {
     console.error(error);
     return apiError("批量编辑失败", 500);
   }
 }
-

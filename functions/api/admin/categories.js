@@ -1,5 +1,5 @@
 import { categoryFromRow, findCategory, listCategories } from "../../_lib/categories.js";
-import { ensureSchema, writePrivateGallerySnapshot } from "../../_lib/db.js";
+import { ensureSchema, invalidateGalleryDerivedData } from "../../_lib/db.js";
 import { apiError, cleanText, json, requireSameOrigin } from "../../_lib/http.js";
 
 export async function onRequestGet(context) {
@@ -38,7 +38,7 @@ export async function onRequestPost(context) {
        VALUES (?1, ?2, '[]', ?3, 1, ?4, ?5)`,
     ).bind(id, name, sortOrder, now, now).run();
 
-    await writePrivateGallerySnapshot(context.env);
+    await invalidateGalleryDerivedData(context);
     const row = await context.env.DB.prepare(
       `SELECT id, name, aliases_json, sort_order, is_visible, 0 AS image_count
        FROM gallery_categories WHERE id = ?1`,
@@ -49,4 +49,3 @@ export async function onRequestPost(context) {
     return apiError("新增分组失败", 500);
   }
 }
-

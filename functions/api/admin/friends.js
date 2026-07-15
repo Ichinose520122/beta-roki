@@ -68,10 +68,15 @@ export async function onRequestPost(context) {
         (id, display_name, normalized_name, student_id_hmac, is_active, created_at, updated_at)
        VALUES (?1, ?2, ?3, ?4, 1, ?5, ?6)`,
     ).bind(id, displayName, normalizedName, studentIdHmac, now, now).run();
-    const row = await context.env.DB.prepare(
-      `SELECT f.*, 0 AS comment_count, 0 AS active_sessions
-       FROM gallery_friends f WHERE id = ?1`,
-    ).bind(id).first();
+    const row = {
+      id,
+      display_name: displayName,
+      is_active: 1,
+      last_login_at: null,
+      created_at: now,
+      comment_count: 0,
+      active_sessions: 0,
+    };
     return json({ ok: true, friend: adminFriend(row) }, { status: 201 });
   } catch (error) {
     console.error(error);

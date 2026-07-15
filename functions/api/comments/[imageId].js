@@ -20,22 +20,18 @@ export async function onRequestGet(context) {
     await ensureSchema(context.env.DB);
     const imageId = String(context.params.imageId || "");
     if (!await findImage(context.env.DB, imageId)) return apiError("照片不存在", 404);
-    const [rows, total] = await Promise.all([
-      context.env.DB.prepare(
-        `SELECT id, author_name, content, created_at
-         FROM photo_comments
-         WHERE image_id = ?1
-         ORDER BY created_at DESC, id DESC
-         LIMIT 100`,
-      ).bind(imageId).all(),
-      context.env.DB.prepare(
-        "SELECT COUNT(*) AS count FROM photo_comments WHERE image_id = ?1",
-      ).bind(imageId).first(),
-    ]);
+    const rows = await context.env.DB.prepare(
+      `SELECT id, author_name, content, created_at,
+        COUNT(*) OVER () AS total_count
+       FROM photo_comments
+       WHERE image_id = ?1
+       ORDER BY created_at DESC, id DESC
+       LIMIT 100`,
+    ).bind(imageId).all();
     return json({
       ok: true,
       imageId,
-      total: Number(total?.count || 0),
+      total: Number(rows.results?.[0]?.total_count || 0),
       comments: (rows.results || []).map(publicComment),
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
@@ -90,9 +86,12 @@ export async function onRequestPost(context) {
         (id, image_id, friend_id, author_name, content, is_read, created_at, updated_at)
        VALUES (?1, ?2, ?3, ?4, ?5, 0, ?6, ?7)`,
     ).bind(id, imageId, session.friend.id, session.friend.displayName, content, now, now).run();
-    const row = await context.env.DB.prepare(
-      "SELECT id, author_name, content, created_at FROM photo_comments WHERE id = ?1",
-    ).bind(id).first();
+    const row = {
+      id,
+      author_name: session.friend.displayName,
+      content,
+      created_at: now,
+    };
     const galleryUrl = new URL("/api/gallery", context.request.url);
     context.waitUntil(caches.default.delete(new Request(galleryUrl.toString())));
     return json({ ok: true, comment: publicComment(row) }, {
