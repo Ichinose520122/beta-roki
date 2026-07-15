@@ -6,7 +6,7 @@
     <meta name="robots" content="noindex, nofollow" />
     <title>图库管理 · 一ノ瀬林檎的小洛克冒险之旅</title>
     <link rel="stylesheet" href="./admin.css" />
-    <script src="./admin.js?v=20260713-hero-image" defer></script>
+    <script src="./admin.js?v=20260715-friend-comments" defer></script>
   </head>
   <body>
     <header class="admin-header">
@@ -32,6 +32,13 @@
         <button id="import-button" type="button" disabled>导入旧索引</button>
         <button id="open-categories" type="button">管理分组</button>
         <button id="open-move" type="button">整组迁移</button>
+        <button id="open-site-settings" type="button">网站设置</button>
+        <button id="open-friends" type="button">
+          好友管理 <span class="action-count" id="friend-count">0</span>
+        </button>
+        <button id="open-comments" type="button">
+          留言管理 <span class="notification-count" id="unread-comment-count" hidden>0</span>
+        </button>
         <a class="export-action" href="/api/admin/export">导出私有 gallery</a>
       </section>
 
@@ -192,6 +199,76 @@
           </span>
         </footer>
       </form>
+    </dialog>
+
+    <dialog id="site-settings-dialog">
+      <form class="editor" id="site-settings-form">
+        <header>
+          <div>
+            <h2>网站设置</h2>
+            <p class="dialog-note">控制标题照片和自动生成的最近更新分组。</p>
+          </div>
+          <button class="close-button" type="button" data-close="site-settings-dialog" aria-label="关闭">×</button>
+        </header>
+
+        <label class="wide">
+          标题照片模式
+          <select name="heroMode">
+            <option value="manual">固定使用后台指定的照片</option>
+            <option value="featured">每次进入时从精选照片随机选择</option>
+            <option value="all">每次进入时从全部照片随机选择</option>
+          </select>
+        </label>
+        <p class="wide dialog-note" id="manual-hero-note">尚未指定固定标题照片。</p>
+        <label class="wide">
+          “最近更新”显示数量
+          <select name="recentLimit">
+            <option value="30">最近上传的 30 张</option>
+            <option value="50">最近上传的 50 张</option>
+          </select>
+        </label>
+
+        <footer>
+          <button type="button" data-close="site-settings-dialog">取消</button>
+          <button class="primary" type="submit">保存网站设置</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <dialog class="manager-dialog" id="friends-dialog">
+      <section class="manager-panel">
+        <header>
+          <div>
+            <h2>好友管理</h2>
+            <p>好友使用游戏名称和学号登录；学号只保存 HMAC。</p>
+          </div>
+          <button class="close-button" type="button" data-close="friends-dialog" aria-label="关闭">×</button>
+        </header>
+
+        <form class="friend-create-form" id="friend-create-form">
+          <input name="displayName" maxlength="40" placeholder="游戏名称" required />
+          <input name="studentId" maxlength="80" placeholder="学号" required />
+          <button class="primary" type="submit">添加好友</button>
+        </form>
+        <p class="manager-hint">现有学号不会在后台重新显示；填写新学号并保存才会替换。</p>
+        <div class="manager-list friend-manager-list" id="friend-manager-list"></div>
+      </section>
+    </dialog>
+
+    <dialog class="manager-dialog" id="comments-dialog">
+      <section class="manager-panel">
+        <header>
+          <div>
+            <h2>好友留言</h2>
+            <p id="comment-manager-summary">正在读取留言…</p>
+          </div>
+          <div class="manager-header-actions">
+            <button id="mark-all-comments-read" type="button">全部标为已读</button>
+            <button class="close-button" type="button" data-close="comments-dialog" aria-label="关闭">×</button>
+          </div>
+        </header>
+        <div class="manager-list comment-manager-list" id="comment-manager-list"></div>
+      </section>
     </dialog>
 
     <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>

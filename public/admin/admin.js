@@ -11,6 +11,13 @@ const state = {
   editOriginal: null,
   categoryDrafts: [],
   heroImageId: "",
+  heroMode: "manual",
+  recentLimit: 30,
+  friends: [],
+  comments: [],
+  commentTotal: 0,
+  unreadCommentCount: 0,
+  activeFriendCount: 0,
 };
 
 const UPLOAD_CONCURRENCY = 4;
@@ -33,6 +40,11 @@ const elements = {
   openUpload: document.querySelector("#open-upload"),
   openCategories: document.querySelector("#open-categories"),
   openMove: document.querySelector("#open-move"),
+  openSiteSettings: document.querySelector("#open-site-settings"),
+  openFriends: document.querySelector("#open-friends"),
+  openComments: document.querySelector("#open-comments"),
+  friendCount: document.querySelector("#friend-count"),
+  unreadCommentCount: document.querySelector("#unread-comment-count"),
   categoryDialog: document.querySelector("#category-dialog"),
   categoryCreateForm: document.querySelector("#category-create-form"),
   categoryManagerList: document.querySelector("#category-manager-list"),
@@ -44,6 +56,16 @@ const elements = {
   editDialog: document.querySelector("#edit-dialog"),
   editForm: document.querySelector("#edit-form"),
   deleteButton: document.querySelector("#delete-button"),
+  siteSettingsDialog: document.querySelector("#site-settings-dialog"),
+  siteSettingsForm: document.querySelector("#site-settings-form"),
+  manualHeroNote: document.querySelector("#manual-hero-note"),
+  friendsDialog: document.querySelector("#friends-dialog"),
+  friendCreateForm: document.querySelector("#friend-create-form"),
+  friendManagerList: document.querySelector("#friend-manager-list"),
+  commentsDialog: document.querySelector("#comments-dialog"),
+  commentManagerList: document.querySelector("#comment-manager-list"),
+  commentManagerSummary: document.querySelector("#comment-manager-summary"),
+  markAllCommentsRead: document.querySelector("#mark-all-comments-read"),
   importInput: document.querySelector("#import-input"),
   importButton: document.querySelector("#import-button"),
   toast: document.querySelector("#toast"),
@@ -55,6 +77,7 @@ async function init() {
   bindControls();
   setDefaultUploadTime();
   await loadGallery();
+  window.setInterval(refreshCommentBadge, 60_000);
 }
 
 async function request(url, options = {}) {
@@ -74,10 +97,19 @@ async function loadGallery() {
     state.categories = data.categories || [];
     state.images = data.images || [];
     state.heroImageId = data.settings?.heroImageId || "";
+    state.heroMode = ["manual", "featured", "all"].includes(data.settings?.heroMode)
+      ? data.settings.heroMode
+      : "manual";
+    state.recentLimit = [30, 50].includes(Number(data.settings?.recentLimit))
+      ? Number(data.settings.recentLimit)
+      : 30;
+    state.unreadCommentCount = Number(data.stats?.unreadCommentCount || 0);
+    state.activeFriendCount = Number(data.stats?.activeFriendCount || 0);
     const availableIds = new Set(state.images.map((image) => image.id));
     state.selectedIds = new Set([...state.selectedIds].filter((id) => availableIds.has(id)));
     elements.adminEmail.textContent = data.admin || "";
     populateCategories();
+    renderAdminSignals();
     render();
     if (elements.categoryDialog.open) startCategoryDraft();
   } catch (error) {
@@ -152,7 +184,7 @@ function createRow(image) {
   const row = document.createElement("article");
   row.className = "image-row";
   row.classList.toggle("is-selected", state.selectedIds.has(image.id));
-  row.classList.toggle("is-hero", state.heroImageId === image.id);
+  row.classList.toggle("is-hero", state.heroMode === "manual" && state.heroImageId === image.id);
 
   const selection = document.createElement("label");
   selection.className = "row-select";
@@ -188,7 +220,9 @@ function createRow(image) {
   badges.className = "badges";
   if (image.pinnedEnabled) badges.append(makeBadge(image.pinned ? "置顶" : "置顶已到期"));
   if (image.featuredEnabled) badges.append(makeBadge(image.featured ? "精选" : "精选已到期"));
-  if (state.heroImageId === image.id) badges.append(makeBadge("标题图"));
+  if (state.heroMode === "manual" && state.heroImageId === image.id) {
+    badges.append(makeBadge("固定标题图"));
+  }
   (image.tags || []).forEach((tag) => badges.append(makeBadge(`# ${tag}`)));
   main.append(badges);
 
@@ -207,8 +241,8 @@ function createRow(image) {
 
   const hero = document.createElement("button");
   hero.type = "button";
-  const isHero = state.heroImageId === image.id;
-  hero.textContent = isHero ? "取消标题图" : "设为标题图";
+  const isHero = state.heroMode === "manual" && state.heroImageId === image.id;
+  hero.textContent = isHero ? "取消固定标题图" : "设为固定标题图";
   hero.className = isHero ? "quiet" : "";
   hero.addEventListener("click", () => setHeroImage(image, hero));
 
@@ -220,7 +254,7 @@ function createRow(image) {
 }
 
 async function setHeroImage(image, button) {
-  const removing = state.heroImageId === image.id;
+  const removing = state.heroMode === "manual" && state.heroImageId === image.id;
   const description = removing
     ? "取消当前网页顶部标题图"
     : `把这张照片设为网页顶部标题图`;
@@ -231,7 +265,11 @@ async function setHeroImage(image, button) {
     await request("/api/admin/site-settings", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ heroImageId: removing ? "" : image.id }),
+      body: JSON.stringify({
+        heroImageId: removing ? "" : image.id,
+        heroMode: "manual",
+        recentLimit: state.recentLimit,
+      }),
     });
     await loadGallery();
     showToast(removing ? "已取消网页标题图" : "网页标题图已更新");
@@ -259,6 +297,13 @@ function makeBadge(text) {
   const badge = document.createElement("b");
   badge.textContent = text;
   return badge;
+}
+
+function renderAdminSignals() {
+  elements.friendCount.textContent = String(state.activeFriendCount);
+  elements.unreadCommentCount.textContent = String(state.unreadCommentCount);
+  elements.unreadCommentCount.hidden = state.unreadCommentCount === 0;
+  elements.openComments.classList.toggle("has-notification", state.unreadCommentCount > 0);
 }
 
 function bindControls() {
@@ -300,6 +345,15 @@ function bindControls() {
   elements.openMove.addEventListener("click", () => {
     syncMoveTargets();
     elements.moveDialog.showModal();
+  });
+  elements.openSiteSettings.addEventListener("click", openSiteSettings);
+  elements.openFriends.addEventListener("click", async () => {
+    elements.friendsDialog.showModal();
+    await loadFriends();
+  });
+  elements.openComments.addEventListener("click", async () => {
+    elements.commentsDialog.showModal();
+    await loadCommentsManager();
   });
   document.querySelectorAll("[data-close]").forEach((button) => {
     button.addEventListener("click", () => document.querySelector(`#${button.dataset.close}`).close());
@@ -350,6 +404,9 @@ function bindControls() {
   elements.moveForm.addEventListener("submit", moveCategory);
   elements.categoryCreateForm.addEventListener("submit", createCategory);
   elements.applyCategorySettings.addEventListener("click", applyCategorySettings);
+  elements.siteSettingsForm.addEventListener("submit", submitSiteSettings);
+  elements.friendCreateForm.addEventListener("submit", createFriend);
+  elements.markAllCommentsRead.addEventListener("click", markAllCommentsRead);
 }
 
 function startCategoryDraft() {
@@ -600,6 +657,343 @@ async function moveCategory(event) {
   } finally {
     submit.disabled = false;
   }
+}
+
+function openSiteSettings() {
+  const form = elements.siteSettingsForm.elements;
+  form.heroMode.value = state.heroMode;
+  form.recentLimit.value = String(state.recentLimit);
+  const hero = state.images.find((image) => image.id === state.heroImageId);
+  elements.manualHeroNote.textContent = hero
+    ? `当前固定照片：${hero.title || hero.categoryName} · ${formatDisplayTime(hero.time)}`
+    : "尚未指定固定标题照片，可以在图片列表中点击“设为固定标题图”。";
+  elements.siteSettingsDialog.showModal();
+}
+
+async function submitSiteSettings(event) {
+  event.preventDefault();
+  const submit = event.submitter;
+  const form = elements.siteSettingsForm.elements;
+  submit.disabled = true;
+  try {
+    await request("/api/admin/site-settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        heroImageId: state.heroImageId,
+        heroMode: form.heroMode.value,
+        recentLimit: Number(form.recentLimit.value),
+      }),
+    });
+    elements.siteSettingsDialog.close();
+    await loadGallery();
+    showToast("网站标题照片和最近更新设置已保存");
+  } catch (error) {
+    showToast(error.message, true);
+  } finally {
+    submit.disabled = false;
+  }
+}
+
+async function refreshCommentBadge() {
+  try {
+    const data = await request("/api/admin/comments?summary=1", { cache: "no-store" });
+    state.unreadCommentCount = Number(data.unreadCount || 0);
+    renderAdminSignals();
+  } catch (error) {
+    console.warn(error);
+  }
+}
+
+async function loadFriends() {
+  elements.friendManagerList.setAttribute("aria-busy", "true");
+  elements.friendManagerList.replaceChildren(makeManagerMessage("正在读取好友名单…"));
+  try {
+    const data = await request("/api/admin/friends", { cache: "no-store" });
+    state.friends = data.friends || [];
+    state.activeFriendCount = state.friends.filter((friend) => friend.active).length;
+    renderAdminSignals();
+    renderFriendManager();
+  } catch (error) {
+    elements.friendManagerList.replaceChildren(makeManagerMessage(error.message, true));
+  } finally {
+    elements.friendManagerList.setAttribute("aria-busy", "false");
+  }
+}
+
+function renderFriendManager() {
+  elements.friendManagerList.replaceChildren();
+  if (!state.friends.length) {
+    elements.friendManagerList.append(makeManagerMessage("还没有好友，请先在上方添加。"));
+    return;
+  }
+  state.friends.forEach((friend) => elements.friendManagerList.append(createFriendManagerRow(friend)));
+}
+
+function createFriendManagerRow(friend) {
+  const form = document.createElement("form");
+  form.className = "friend-manager-row";
+  form.dataset.friendId = friend.id;
+
+  const name = document.createElement("input");
+  name.name = "displayName";
+  name.maxLength = 40;
+  name.value = friend.displayName;
+  name.setAttribute("aria-label", `${friend.displayName}的游戏名称`);
+  const studentId = document.createElement("input");
+  studentId.name = "studentId";
+  studentId.maxLength = 80;
+  studentId.placeholder = "新学号（不修改请留空）";
+  studentId.setAttribute("aria-label", `${friend.displayName}的新学号`);
+
+  const activeLabel = document.createElement("label");
+  activeLabel.className = "friend-active";
+  const active = document.createElement("input");
+  active.type = "checkbox";
+  active.name = "active";
+  active.checked = friend.active;
+  activeLabel.append(active, document.createTextNode("允许登录"));
+
+  const meta = document.createElement("p");
+  const loginText = friend.lastLoginAt
+    ? `最近登录 ${formatDisplayTime(friend.lastLoginAt)}`
+    : "尚未登录";
+  meta.textContent = `${friend.commentCount} 条留言 · ${friend.activeSessions} 个会话 · ${loginText}`;
+
+  const actions = document.createElement("div");
+  actions.className = "manager-row-actions";
+  const save = document.createElement("button");
+  save.className = "primary";
+  save.type = "submit";
+  save.textContent = "保存";
+  const revoke = document.createElement("button");
+  revoke.type = "button";
+  revoke.textContent = "退出所有设备";
+  revoke.disabled = friend.activeSessions === 0;
+  revoke.addEventListener("click", () => revokeFriendSessions(friend, revoke));
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.className = "danger";
+  remove.textContent = "删除";
+  remove.addEventListener("click", () => deleteFriend(friend, remove));
+  actions.append(save, revoke, remove);
+  form.append(name, studentId, activeLabel, meta, actions);
+  form.addEventListener("submit", (event) => saveFriend(event, friend));
+  return form;
+}
+
+async function createFriend(event) {
+  event.preventDefault();
+  const submit = event.submitter;
+  const form = elements.friendCreateForm.elements;
+  submit.disabled = true;
+  try {
+    await request("/api/admin/friends", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        displayName: form.displayName.value,
+        studentId: form.studentId.value,
+      }),
+    });
+    elements.friendCreateForm.reset();
+    await loadFriends();
+    showToast("好友已添加，可以使用游戏名称和学号登录");
+  } catch (error) {
+    showToast(error.message, true);
+  } finally {
+    submit.disabled = false;
+  }
+}
+
+async function saveFriend(event, friend) {
+  event.preventDefault();
+  const submit = event.submitter;
+  const form = event.currentTarget.elements;
+  submit.disabled = true;
+  try {
+    await request(`/api/admin/friends/${encodeURIComponent(friend.id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        displayName: form.displayName.value,
+        studentId: form.studentId.value,
+        active: form.active.checked,
+      }),
+    });
+    await loadFriends();
+    showToast("好友资料已保存");
+  } catch (error) {
+    showToast(error.message, true);
+  } finally {
+    submit.disabled = false;
+  }
+}
+
+async function revokeFriendSessions(friend, button) {
+  if (!confirm(`让“${friend.displayName}”在所有设备退出登录吗？`)) return;
+  button.disabled = true;
+  try {
+    await request(`/api/admin/friends/${encodeURIComponent(friend.id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ revokeSessions: true }),
+    });
+    await loadFriends();
+    showToast("该好友的登录状态已全部清除");
+  } catch (error) {
+    showToast(error.message, true);
+    button.disabled = false;
+  }
+}
+
+async function deleteFriend(friend, button) {
+  if (!confirm(`确定从好友名单删除“${friend.displayName}”吗？已有留言会保留。`)) return;
+  button.disabled = true;
+  try {
+    await request(`/api/admin/friends/${encodeURIComponent(friend.id)}`, { method: "DELETE" });
+    await loadFriends();
+    showToast("好友已删除，历史留言仍然保留");
+  } catch (error) {
+    showToast(error.message, true);
+    button.disabled = false;
+  }
+}
+
+async function loadCommentsManager() {
+  elements.commentManagerList.setAttribute("aria-busy", "true");
+  elements.commentManagerList.replaceChildren(makeManagerMessage("正在读取好友留言…"));
+  try {
+    const data = await request("/api/admin/comments", { cache: "no-store" });
+    state.comments = data.comments || [];
+    state.commentTotal = Number(data.total || 0);
+    state.unreadCommentCount = Number(data.unreadCount || 0);
+    renderAdminSignals();
+    renderCommentManager();
+  } catch (error) {
+    elements.commentManagerList.replaceChildren(makeManagerMessage(error.message, true));
+  } finally {
+    elements.commentManagerList.setAttribute("aria-busy", "false");
+  }
+}
+
+function renderCommentManager() {
+  elements.commentManagerList.replaceChildren();
+  elements.commentManagerSummary.textContent = `${state.commentTotal} 条留言 · ${state.unreadCommentCount} 条未读`;
+  elements.markAllCommentsRead.disabled = state.unreadCommentCount === 0;
+  if (!state.comments.length) {
+    elements.commentManagerList.append(makeManagerMessage("还没有收到好友留言。"));
+    return;
+  }
+  state.comments.forEach((comment) => {
+    const row = document.createElement("article");
+    row.className = "comment-manager-row";
+    row.classList.toggle("is-unread", !comment.read);
+
+    const photo = document.createElement("a");
+    photo.href = `/?photo=${encodeURIComponent(comment.imageId)}`;
+    photo.target = "_blank";
+    photo.rel = "noopener noreferrer";
+    photo.title = "在公开图库中打开照片";
+    const image = document.createElement("img");
+    image.src = comment.imageUrl;
+    image.alt = comment.imageTitle;
+    image.loading = "lazy";
+    photo.append(image);
+
+    const content = document.createElement("div");
+    content.className = "comment-manager-content";
+    const heading = document.createElement("div");
+    const author = document.createElement("strong");
+    author.textContent = comment.authorName;
+    const time = document.createElement("span");
+    time.textContent = formatDisplayTime(comment.createdAt);
+    heading.append(author, time);
+    const message = document.createElement("p");
+    message.textContent = comment.content;
+    const photoMeta = document.createElement("small");
+    photoMeta.textContent = `${comment.categoryName} · ${comment.imageTitle} · ${formatDisplayTime(comment.imageTime)}`;
+    content.append(heading, message, photoMeta);
+
+    const actions = document.createElement("div");
+    actions.className = "manager-row-actions";
+    if (!comment.read) {
+      const read = document.createElement("button");
+      read.type = "button";
+      read.textContent = "标为已读";
+      read.addEventListener("click", () => markCommentRead(comment, read));
+      actions.append(read);
+    }
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "danger";
+    remove.textContent = "删除";
+    remove.addEventListener("click", () => deleteAdminComment(comment, remove));
+    actions.append(remove);
+    row.append(photo, content, actions);
+    elements.commentManagerList.append(row);
+  });
+}
+
+async function markCommentRead(comment, button) {
+  button.disabled = true;
+  try {
+    await request(`/api/admin/comments/${encodeURIComponent(comment.id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ read: true }),
+    });
+    comment.read = true;
+    state.unreadCommentCount = Math.max(0, state.unreadCommentCount - 1);
+    renderAdminSignals();
+    renderCommentManager();
+  } catch (error) {
+    showToast(error.message, true);
+    button.disabled = false;
+  }
+}
+
+async function markAllCommentsRead() {
+  elements.markAllCommentsRead.disabled = true;
+  try {
+    await request("/api/admin/comments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "mark-all-read" }),
+    });
+    state.comments.forEach((comment) => { comment.read = true; });
+    state.unreadCommentCount = 0;
+    renderAdminSignals();
+    renderCommentManager();
+    showToast("全部留言已标为已读");
+  } catch (error) {
+    showToast(error.message, true);
+    elements.markAllCommentsRead.disabled = false;
+  }
+}
+
+async function deleteAdminComment(comment, button) {
+  if (!confirm(`确定删除“${comment.authorName}”的这条留言吗？`)) return;
+  button.disabled = true;
+  try {
+    await request(`/api/admin/comments/${encodeURIComponent(comment.id)}`, { method: "DELETE" });
+    state.comments = state.comments.filter((item) => item.id !== comment.id);
+    state.commentTotal = Math.max(0, state.commentTotal - 1);
+    if (!comment.read) state.unreadCommentCount = Math.max(0, state.unreadCommentCount - 1);
+    renderAdminSignals();
+    renderCommentManager();
+    showToast("留言已删除");
+  } catch (error) {
+    showToast(error.message, true);
+    button.disabled = false;
+  }
+}
+
+function makeManagerMessage(message, error = false) {
+  const paragraph = document.createElement("p");
+  paragraph.className = `manager-empty${error ? " is-error" : ""}`;
+  paragraph.textContent = message;
+  return paragraph;
 }
 
 function setupScheduleControls(form) {

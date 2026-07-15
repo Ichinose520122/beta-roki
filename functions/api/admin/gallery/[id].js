@@ -107,7 +107,10 @@ export async function onRequestDelete(context) {
     if (!current) return apiError("图片不存在", 404);
 
     await context.env.GALLERY_BUCKET.delete(current.object_key);
-    await context.env.DB.prepare("DELETE FROM gallery_items WHERE id = ?1").bind(id).run();
+    await context.env.DB.batch([
+      context.env.DB.prepare("DELETE FROM photo_comments WHERE image_id = ?1").bind(id),
+      context.env.DB.prepare("DELETE FROM gallery_items WHERE id = ?1").bind(id),
+    ]);
     const heroSetting = await context.env.DB.prepare(
       "SELECT value FROM gallery_settings WHERE key = 'hero_image_id'",
     ).first();

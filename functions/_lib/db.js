@@ -50,6 +50,51 @@ const SETTINGS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS gallery_settings (
   value TEXT NOT NULL,
   updated_at TEXT NOT NULL
 )`;
+const FRIENDS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS gallery_friends (
+  id TEXT PRIMARY KEY,
+  display_name TEXT NOT NULL,
+  normalized_name TEXT NOT NULL,
+  student_id_hmac TEXT NOT NULL UNIQUE,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  last_login_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+)`;
+const FRIEND_SESSIONS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS friend_sessions (
+  token_hash TEXT PRIMARY KEY,
+  friend_id TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  last_used_at TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (friend_id) REFERENCES gallery_friends(id) ON DELETE CASCADE
+)`;
+const COMMENTS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS photo_comments (
+  id TEXT PRIMARY KEY,
+  image_id TEXT NOT NULL,
+  friend_id TEXT,
+  author_name TEXT NOT NULL,
+  content TEXT NOT NULL,
+  is_read INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (image_id) REFERENCES gallery_items(id) ON DELETE CASCADE,
+  FOREIGN KEY (friend_id) REFERENCES gallery_friends(id) ON DELETE SET NULL
+)`;
+const LOGIN_ATTEMPTS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS friend_login_attempts (
+  identity_hash TEXT PRIMARY KEY,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  window_started_at TEXT NOT NULL,
+  blocked_until TEXT,
+  updated_at TEXT NOT NULL
+)`;
+const FRIEND_NAME_INDEX_SQL =
+  "CREATE INDEX IF NOT EXISTS gallery_friends_name_idx ON gallery_friends(normalized_name, is_active)";
+const FRIEND_SESSION_INDEX_SQL =
+  "CREATE INDEX IF NOT EXISTS friend_sessions_friend_idx ON friend_sessions(friend_id, expires_at)";
+const COMMENT_IMAGE_INDEX_SQL =
+  "CREATE INDEX IF NOT EXISTS photo_comments_image_idx ON photo_comments(image_id, created_at DESC)";
+const COMMENT_UNREAD_INDEX_SQL =
+  "CREATE INDEX IF NOT EXISTS photo_comments_unread_idx ON photo_comments(is_read, created_at DESC)";
 
 async function initializeSchema(db) {
   await db.batch([
@@ -60,6 +105,14 @@ async function initializeSchema(db) {
     db.prepare(SCHEDULE_INDEX_SQL),
     db.prepare(SNAPSHOT_TABLE_SQL),
     db.prepare(SETTINGS_TABLE_SQL),
+    db.prepare(FRIENDS_TABLE_SQL),
+    db.prepare(FRIEND_SESSIONS_TABLE_SQL),
+    db.prepare(COMMENTS_TABLE_SQL),
+    db.prepare(LOGIN_ATTEMPTS_TABLE_SQL),
+    db.prepare(FRIEND_NAME_INDEX_SQL),
+    db.prepare(FRIEND_SESSION_INDEX_SQL),
+    db.prepare(COMMENT_IMAGE_INDEX_SQL),
+    db.prepare(COMMENT_UNREAD_INDEX_SQL),
   ]);
 
   const now = new Date().toISOString();
@@ -116,8 +169,8 @@ export function scheduleIsActive(enabled, until, now = new Date()) {
   return String(until) > current;
 }
 
-export function publicItem(row, now = new Date()) {
-  return {
+export function publicItem(row, now = new Date(), options = {}) {
+  const item = {
     id: row.id,
     title: row.title || "",
     comment: row.comment || "",
@@ -127,6 +180,15 @@ export function publicItem(row, now = new Date()) {
     featured: scheduleIsActive(row.is_featured, row.featured_until, now),
     url: `/gallery/${encodeURIComponent(row.id)}`,
   };
+  if (options.category) {
+    item.categoryId = options.category.id;
+    item.categoryName = options.category.name;
+  }
+  if (options.commentInfo) {
+    item.friendCommentCount = Number(options.commentInfo.count || 0);
+    item.friendComments = options.commentInfo.items || [];
+  }
+  return item;
 }
 
 export function adminItem(row, categories, now = new Date()) {
@@ -171,6 +233,42 @@ export async function listRows(db, includeObjectKey = false) {
   return result.results || [];
 }
 
+export async function listPublicCommentSummaries(db, perImage = 2) {
+  const limit = Math.max(1, Math.min(3, Number(perImage) || 2));
+  const result = await db.prepare(
+    `SELECT image_id, id, author_name, content, created_at, total_count
+     FROM (
+       SELECT
+         image_id,
+         id,
+         author_name,
+         content,
+         created_at,
+         COUNT(*) OVER (PARTITION BY image_id) AS total_count,
+         ROW_NUMBER() OVER (
+           PARTITION BY image_id ORDER BY created_at DESC, id DESC
+         ) AS row_number
+       FROM photo_comments
+     )
+     WHERE row_number <= ?1
+     ORDER BY image_id ASC, created_at DESC, id DESC`,
+  ).bind(limit).all();
+
+  const summaries = new Map();
+  (result.results || []).forEach((row) => {
+    if (!summaries.has(row.image_id)) {
+      summaries.set(row.image_id, { count: Number(row.total_count || 0), items: [] });
+    }
+    summaries.get(row.image_id).items.push({
+      id: String(row.id),
+      authorName: String(row.author_name),
+      content: String(row.content),
+      createdAt: String(row.created_at),
+    });
+  });
+  return summaries;
+}
+
 export async function getSetting(db, key) {
   const row = await db.prepare(
     "SELECT value FROM gallery_settings WHERE key = ?1",
@@ -197,15 +295,21 @@ export async function setSetting(db, key, value) {
 }
 
 export async function writePrivateGallerySnapshot(env) {
-  const [rows, categories, heroImageId] = await Promise.all([
+  const [rows, categories, heroImageId, heroMode, recentLimit] = await Promise.all([
     listRows(env.DB, true),
     listCategories(env.DB),
     getSetting(env.DB, "hero_image_id"),
+    getSetting(env.DB, "hero_mode"),
+    getSetting(env.DB, "recent_limit"),
   ]);
   const snapshot = {
-    version: 3,
+    version: 4,
     updatedAt: new Date().toISOString(),
-    settings: { heroImageId },
+    settings: {
+      heroImageId,
+      heroMode: ["manual", "featured", "all"].includes(heroMode) ? heroMode : "manual",
+      recentLimit: [30, 50].includes(Number(recentLimit)) ? Number(recentLimit) : 30,
+    },
     categories: categories.map(({ id, name, sortOrder, visible }) => ({
       id,
       name,
@@ -241,13 +345,20 @@ export async function writePrivateGallerySnapshot(env) {
   return snapshot;
 }
 
-export function buildPublicGallery(rows, categories) {
+export function buildPublicGallery(rows, categories, options = {}) {
   const now = new Date();
   const grouped = new Map(categories.map((category) => [category.id, []]));
+  const visibleEntries = [];
 
   rows.forEach((row) => {
     const category = findCategoryInList(categories, row.category);
-    if (category) grouped.get(category.id).push(publicItem(row, now));
+    if (!category) return;
+    const item = publicItem(row, now, {
+      category,
+      commentInfo: options.commentSummaries?.get(row.id) || { count: 0, items: [] },
+    });
+    grouped.get(category.id).push(item);
+    visibleEntries.push({ row, item });
   });
 
   const sortItems = (a, b) => {
@@ -256,13 +367,28 @@ export function buildPublicGallery(rows, categories) {
     return Date.parse(b.time.replace(" ", "T")) - Date.parse(a.time.replace(" ", "T"));
   };
 
+  const recentLimit = [30, 50].includes(Number(options.recentLimit))
+    ? Number(options.recentLimit)
+    : 30;
+  const recentImages = visibleEntries
+    .sort((a, b) => {
+      const delta = Date.parse(b.row.created_at || "") - Date.parse(a.row.created_at || "");
+      if (Number.isFinite(delta) && delta !== 0) return delta;
+      return String(b.row.id).localeCompare(String(a.row.id));
+    })
+    .slice(0, recentLimit)
+    .map((entry) => entry.item);
+
   return {
-    version: 3,
+    version: 4,
     generatedAt: now.toISOString(),
-    categories: categories.map((category) => ({
-      id: category.id,
-      name: category.name,
-      images: (grouped.get(category.id) || []).sort(sortItems),
-    })),
+    categories: [
+      { id: "recent-updates", name: "最近更新", virtual: true, images: recentImages },
+      ...categories.map((category) => ({
+        id: category.id,
+        name: category.name,
+        images: (grouped.get(category.id) || []).sort(sortItems),
+      })),
+    ],
   };
 }
