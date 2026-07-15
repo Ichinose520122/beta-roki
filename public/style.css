@@ -931,11 +931,19 @@ a {
 }
 
 .comment-form label,
+.comment-form footer {
+  font-weight: 600;
+  line-height: 1.5;
+}
+
 .comment-form textarea,
-.comment-form footer,
 .comment-form button {
   font-weight: 400;
   line-height: 1.5;
+}
+
+.comment-form textarea::placeholder {
+  font-weight: 600;
 }
 
 .comment-form textarea {
