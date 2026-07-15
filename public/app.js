@@ -533,7 +533,6 @@ function initialCommentRecord(image) {
   return {
     total: image.friendCommentCount,
     comments: image.friendComments,
-    loading: false,
     error: "",
   };
 }
@@ -543,7 +542,6 @@ async function loadComments(image) {
     state.commentsByImage.set(image.id, initialCommentRecord(image));
   }
   const record = state.commentsByImage.get(image.id);
-  record.loading = true;
   record.error = "";
   renderComments(image.id);
   try {
@@ -553,12 +551,10 @@ async function loadComments(image) {
     state.commentsByImage.set(image.id, {
       total: Number(data.total || 0),
       comments: normalizeComments(data.comments),
-      loading: false,
       error: "",
     });
     syncImageCommentSummaries(image.id);
   } catch (error) {
-    record.loading = false;
     record.error = error.message;
   }
   renderComments(image.id);
@@ -584,15 +580,13 @@ function renderComments(imageId) {
     article.append(header, content);
     elements.commentsList.append(article);
   });
-  if (!record.comments.length && !record.loading && !record.error) {
+  if (!record.comments.length && !record.error) {
     const empty = document.createElement("p");
     empty.className = "comments-empty";
     empty.textContent = "还没有留言，来写下第一张小纸条吧。";
     elements.commentsList.append(empty);
   }
-  elements.commentsStatus.textContent = record.loading
-    ? "正在读取留言…"
-    : record.error;
+  elements.commentsStatus.textContent = record.error;
   elements.commentsStatus.classList.toggle("is-error", Boolean(record.error));
   renderFriendState();
 }
@@ -692,7 +686,6 @@ async function submitComment(event) {
     const record = state.commentsByImage.get(image.id) || initialCommentRecord(image);
     record.comments = [data.comment, ...record.comments.filter((item) => item.id !== data.comment.id)];
     record.total += 1;
-    record.loading = false;
     record.error = "";
     state.commentsByImage.set(image.id, record);
     elements.commentForm.reset();
