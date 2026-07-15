@@ -807,7 +807,7 @@ a {
 
 .comments-panel {
   width: min(860px, 100%);
-  height: 250px;
+  height: 240px;
   max-height: none;
   padding: 10px 12px;
   margin: 5px 0 0;
@@ -1129,12 +1129,12 @@ textarea:focus-visible {
   }
 
   .lightbox-stage figure {
-    flex: 0 0 calc(100% - 256px);
-    height: calc(100% - 256px);
+    flex: 0 0 calc(100% - 246px);
+    height: calc(100% - 246px);
   }
 
   .comments-panel {
-    flex: 0 0 250px;
+    flex: 0 0 240px;
   }
 }
 
