@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="一ノ瀬林檎的小洛克冒险之旅" />
+    <meta name="theme-color" content="#fff7f1" />
+    <title>一ノ瀬林檎的小洛克冒险之旅</title>
+    <link rel="stylesheet" href="./style.css?v=20260716-lightbox-layout-v6" />
+    <script src="./app.js?v=20260716-db-opt-v1" defer></script>
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="header-media" id="header-media" hidden>
+        <img
+          class="header-cover"
+          id="header-cover"
+          src=""
+          alt=""
+          loading="eager"
+          fetchpriority="high"
+          decoding="async"
+        />
+      </div>
+      <div class="header-copy">
+        <p class="eyebrow">RINGO'S ROCO ADVENTURE</p>
+        <h1>一ノ瀬林檎的小洛克冒险之旅</h1>
+        <p class="header-note">把旅途里的相遇、星光与可爱瞬间，轻轻收藏在这里。</p>
+      </div>
+      <div class="header-actions">
+        <button class="friend-entry" id="friend-entry" type="button">
+          <span aria-hidden="true">♡</span>
+          <span id="friend-entry-label">好友登录</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="gallery-app">
+      <section class="gallery-layout" aria-labelledby="gallery-title">
+        <h2 class="sr-only" id="gallery-title">图片分类与列表</h2>
+
+        <aside class="category-sidebar" aria-label="图库分类">
+          <p class="sidebar-label">分类</p>
+          <div
+            class="category-tabs"
+            id="category-tabs"
+            role="tablist"
+            aria-label="截图分类"
+            aria-orientation="vertical"
+          ></div>
+          <a class="sidebar-admin-entry" href="/admin/" aria-label="进入管理后台">
+            <span aria-hidden="true">✿</span>
+            管理后台
+          </a>
+        </aside>
+
+        <div class="gallery-content">
+          <div class="toolbar">
+            <label class="search-field">
+              <span class="sr-only">搜索图片</span>
+              <input
+                id="search-input"
+                type="search"
+                placeholder="搜索标签或日期"
+                autocomplete="off"
+              />
+            </label>
+
+            <label class="sort-control" for="sort-select">
+              <span>排序</span>
+              <select id="sort-select">
+                <option value="desc" selected>最新优先</option>
+                <option value="asc">最早优先</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="gallery-status" aria-live="polite">
+            <p id="result-summary">正在读取图库…</p>
+            <span id="sort-badge">时间倒序</span>
+          </div>
+
+          <div class="gallery-grid" id="gallery-grid" aria-busy="true">
+            <article class="skeleton-card"><div></div><span></span></article>
+            <article class="skeleton-card"><div></div><span></span></article>
+            <article class="skeleton-card"><div></div><span></span></article>
+          </div>
+
+          <div class="empty-state" id="empty-state" hidden>
+            <h3>没有找到图片</h3>
+            <p>请检查分类或搜索条件。</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <dialog class="lightbox" id="lightbox" aria-labelledby="lightbox-title">
+      <div class="lightbox-shell">
+        <div class="lightbox-topbar">
+          <div>
+            <span id="lightbox-position">1 / 1</span>
+            <strong id="lightbox-title">图片</strong>
+          </div>
+          <div class="lightbox-actions">
+            <a id="open-original" href="#" target="_blank" rel="noopener noreferrer">打开原图</a>
+            <a id="download-original" href="#" download>下载原图</a>
+            <button class="icon-button" id="lightbox-close" type="button" aria-label="关闭">×</button>
+          </div>
+        </div>
+
+        <div class="lightbox-stage" id="lightbox-stage">
+          <button class="nav-button prev" id="lightbox-prev" type="button" aria-label="上一张">‹</button>
+          <div class="lightbox-center">
+            <figure>
+              <div class="image-loader" id="image-loader" aria-hidden="true"></div>
+              <img id="lightbox-image" src="" alt="" />
+              <figcaption>
+                <div>
+                  <p id="lightbox-time"></p>
+                  <span id="lightbox-category"></span>
+                </div>
+                <p class="lightbox-comment" id="lightbox-comment"></p>
+              </figcaption>
+            </figure>
+
+            <section class="comments-panel" aria-labelledby="comments-title">
+              <header>
+                <div>
+                  <h2 id="comments-title">好友留言</h2>
+                  <span id="comments-count">0 条</span>
+                </div>
+                <button class="comments-login" id="comments-login" type="button">好友登录</button>
+              </header>
+              <p class="comments-status" id="comments-status" aria-live="polite"></p>
+              <div class="comments-list" id="comments-list"></div>
+              <form class="comment-form" id="comment-form" hidden>
+                <label for="comment-content">写下对这张照片的留言</label>
+                <textarea id="comment-content" name="content" maxlength="500" rows="3" required placeholder="说说你喜欢这个瞬间的哪里…"></textarea>
+                <footer>
+                  <span id="comment-as"></span>
+                  <button type="submit">发表留言</button>
+                </footer>
+              </form>
+              <div class="comments-guest" id="comments-guest">
+                <p>登录好友身份后，就可以给这张照片留下小纸条。</p>
+                <button id="comments-guest-login" type="button">使用游戏名称和学号登录</button>
+              </div>
+            </section>
+          </div>
+          <button class="nav-button next" id="lightbox-next" type="button" aria-label="下一张">›</button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog class="friend-dialog" id="friend-dialog" aria-labelledby="friend-dialog-title">
+      <section class="friend-auth">
+        <header>
+          <div>
+            <p>FRIEND PASS</p>
+            <h2 id="friend-dialog-title">好友登录</h2>
+          </div>
+          <button class="friend-dialog-close" id="friend-dialog-close" type="button" aria-label="关闭">×</button>
+        </header>
+
+        <form id="friend-login-form">
+          <label>
+            <span>游戏名称</span>
+            <input name="displayName" maxlength="40" autocomplete="username" required />
+          </label>
+          <label>
+            <span>学号</span>
+            <input name="studentId" type="password" maxlength="80" autocomplete="current-password" required />
+          </label>
+          <p>仅用于和林檎添加的好友名单匹配，学号不会以明文保存。</p>
+          <button type="submit">进入好友留言区</button>
+        </form>
+
+        <div class="friend-session" id="friend-session" hidden>
+          <span aria-hidden="true">♡</span>
+          <h3 id="friend-session-name"></h3>
+          <p>这个浏览器会记住登录状态，之后可以直接留言。</p>
+          <button id="friend-logout" type="button">退出好友登录</button>
+        </div>
+        <p class="friend-auth-message" id="friend-auth-message" aria-live="polite"></p>
+      </section>
+    </dialog>
+
+    <noscript><p class="noscript">请启用 JavaScript 后访问图库。</p></noscript>
+  </body>
+</html>
