@@ -797,7 +797,8 @@ a {
 
 .comments-panel {
   width: min(860px, 100%);
-  max-height: min(270px, 36vh);
+  height: 220px;
+  max-height: none;
   padding: 14px 16px 16px;
   margin: 14px 0 0;
   overflow: auto;
@@ -1191,11 +1192,46 @@ textarea:focus-visible {
   .category-label span { margin-left: 8px; }
 
   .toolbar {
-    display: grid;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 6px;
+    align-items: center;
+    padding: 8px;
+  }
+
+  .search-field {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .search-field input {
+    min-width: 0;
+    padding: 7px 8px;
+    font-size: 12px;
   }
 
   .sort-control {
-    justify-content: space-between;
+    flex: 0 0 auto;
+    gap: 5px;
+    justify-content: flex-start;
+    white-space: nowrap;
+  }
+
+  .sort-control > span {
+    flex: 0 0 auto;
+    color: var(--muted);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    line-height: 1;
+    text-orientation: upright;
+    writing-mode: vertical-rl;
+  }
+
+  .sort-control select {
+    width: 88px;
+    min-width: 0;
+    padding: 6px 22px 6px 7px;
+    font-size: 11px;
   }
 
   .gallery-grid {
@@ -1230,7 +1266,8 @@ textarea:focus-visible {
   }
 
   .comments-panel {
-    max-height: min(230px, 34vh);
+    height: 300px;
+    max-height: none;
     margin: 14px 0 12px;
   }
 
