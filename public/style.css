@@ -947,7 +947,7 @@ a {
 }
 
 .comment-form textarea::placeholder {
-  font-weight: 600;
+  font-weight: 400;
 }
 
 .comment-form textarea {
