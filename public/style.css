@@ -74,12 +74,15 @@ a {
 }
 
 .app-header {
+  --header-height: clamp(250px, 25vw, 320px);
   position: relative;
   display: flex;
   gap: 24px;
   align-items: center;
   justify-content: space-between;
-  min-height: 250px;
+  height: var(--header-height);
+  min-height: var(--header-height);
+  max-height: var(--header-height);
   padding: 32px;
   margin-top: 20px;
   overflow: hidden;
@@ -1120,7 +1123,7 @@ textarea:focus-visible {
   }
 
   .app-header {
-    min-height: 220px;
+    --header-height: 250px;
     padding: 22px;
     margin-top: 12px;
     gap: 14px;
