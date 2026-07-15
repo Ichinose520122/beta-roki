@@ -124,7 +124,6 @@ a {
 }
 
 .app-header.has-cover::before { opacity: 1; }
-.app-header.has-cover { min-height: clamp(250px, 25vw, 320px); }
 .app-header.is-cover-ready .header-cover { opacity: 1; }
 .app-header.has-cover::after { display: none; }
 .app-header.has-cover h1,
@@ -1126,10 +1125,6 @@ textarea:focus-visible {
     margin-top: 12px;
     gap: 14px;
     align-items: flex-start;
-  }
-
-  .app-header.has-cover {
-    min-height: 250px;
   }
 
   .app-header.has-cover .header-copy {
