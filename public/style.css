@@ -936,9 +936,13 @@ a {
   line-height: 1.5;
 }
 
-.comment-form textarea,
-.comment-form button {
+.comment-form textarea {
   font-weight: 400;
+  line-height: 1.5;
+}
+
+.comment-form button {
+  font-weight: 700;
   line-height: 1.5;
 }
 
