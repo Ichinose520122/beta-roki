@@ -115,6 +115,9 @@ a {
 }
 
 .header-media {
+  width: auto;
+  height: auto;
+  inset: -1px;
   overflow: hidden;
   background: #ead8d3;
 }
