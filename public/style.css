@@ -806,8 +806,10 @@ a {
 }
 
 .comments-panel {
+  display: flex;
+  flex-direction: column;
   width: min(860px, 100%);
-  height: 240px;
+  height: 230px;
   max-height: none;
   padding: 10px 12px;
   margin: 5px 0 0;
@@ -920,10 +922,20 @@ a {
 
 .comment-form {
   display: grid;
-  gap: 4px;
-  padding-top: 6px;
-  margin-top: 6px;
+  gap: 5px;
+  padding-top: 7px;
+  margin-top: auto;
   border-top: 1px dashed #e7c9cc;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.comment-form label,
+.comment-form textarea,
+.comment-form footer,
+.comment-form button {
+  font-weight: 400;
+  line-height: 1.5;
 }
 
 .comment-form textarea {
@@ -938,13 +950,21 @@ a {
   resize: none;
 }
 
+.comment-form footer {
+  min-height: 27px;
+}
+
+.comment-form button {
+  min-height: 27px;
+}
+
 .comments-guest {
   display: flex;
   gap: 8px;
   align-items: center;
   justify-content: space-between;
   padding-top: 6px;
-  margin-top: 6px;
+  margin-top: auto;
   border-top: 1px dashed #e7c9cc;
 }
 
@@ -1129,12 +1149,12 @@ textarea:focus-visible {
   }
 
   .lightbox-stage figure {
-    flex: 0 0 calc(100% - 246px);
-    height: calc(100% - 246px);
+    flex: 0 0 calc(100% - 236px);
+    height: calc(100% - 236px);
   }
 
   .comments-panel {
-    flex: 0 0 240px;
+    flex: 0 0 230px;
   }
 }
 
