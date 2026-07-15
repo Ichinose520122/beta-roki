@@ -24,7 +24,6 @@ const elements = {
   header: document.querySelector(".app-header"),
   headerMedia: document.querySelector("#header-media"),
   headerCover: document.querySelector("#header-cover"),
-  headerCoverBackdrop: document.querySelector("#header-cover-backdrop"),
   friendEntry: document.querySelector("#friend-entry"),
   friendEntryLabel: document.querySelector("#friend-entry-label"),
   tabs: document.querySelector("#category-tabs"),
@@ -145,20 +144,34 @@ function renderHeroImage() {
   const image = state.heroImage;
   if (!image) {
     elements.headerMedia.hidden = true;
-    elements.header.classList.remove("has-cover");
+    elements.header.classList.remove("has-cover", "is-cover-ready");
     return;
   }
 
+  let preload = document.querySelector("#hero-image-preload");
+  if (!preload) {
+    preload = document.createElement("link");
+    preload.id = "hero-image-preload";
+    preload.rel = "preload";
+    preload.as = "image";
+    document.head.append(preload);
+  }
+  preload.fetchPriority = "high";
+  preload.href = image.url;
+
+  elements.headerMedia.hidden = false;
+  elements.header.classList.add("has-cover");
+  elements.header.classList.remove("is-cover-ready");
   elements.headerCover.alt = image.title || `${image.categoryName || "冒险"}标题照片`;
+  elements.headerCover.loading = "eager";
+  elements.headerCover.fetchPriority = "high";
   elements.headerCover.onload = () => {
-    elements.headerMedia.hidden = false;
-    elements.header.classList.add("has-cover");
+    elements.header.classList.add("is-cover-ready");
   };
   elements.headerCover.onerror = () => {
     elements.headerMedia.hidden = true;
-    elements.header.classList.remove("has-cover");
+    elements.header.classList.remove("has-cover", "is-cover-ready");
   };
-  elements.headerCoverBackdrop.src = image.url;
   elements.headerCover.src = image.url;
 }
 
@@ -335,7 +348,8 @@ function createImageCard(image, index) {
   const picture = document.createElement("img");
   picture.src = image.url;
   picture.alt = image.title || `${image.categoryName}截图，拍摄于${formatTime(image.time)}`;
-  picture.loading = index < 3 ? "eager" : "lazy";
+  picture.loading = "lazy";
+  picture.fetchPriority = "low";
   picture.decoding = "async";
   picture.dataset.loading = "true";
   picture.addEventListener("load", () => delete picture.dataset.loading);

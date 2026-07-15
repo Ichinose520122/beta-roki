@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="noindex, nofollow" />
     <title>图库管理 · 一ノ瀬林檎的小洛克冒险之旅</title>
-    <link rel="stylesheet" href="./admin.css" />
-    <script src="./admin.js?v=20260715-friend-comments" defer></script>
+    <link rel="stylesheet" href="./admin.css?v=20260716-friend-config" />
+    <script src="./admin.js?v=20260716-friend-config" defer></script>
   </head>
   <body>
     <header class="admin-header">
@@ -25,11 +25,6 @@
 
       <section class="actions" aria-label="图库操作">
         <button class="primary" id="open-upload" type="button">上传截图</button>
-        <label class="file-action">
-          <span>选择旧 gallery.json</span>
-          <input id="import-input" type="file" accept="application/json,.json" />
-        </label>
-        <button id="import-button" type="button" disabled>导入旧索引</button>
         <button id="open-categories" type="button">管理分组</button>
         <button id="open-move" type="button">整组迁移</button>
         <button id="open-site-settings" type="button">网站设置</button>
@@ -80,7 +75,7 @@
 
       <div class="empty" id="empty" hidden>
         <h2>没有找到图片</h2>
-        <p>可以上传新截图，或导入现有 gallery.json。</p>
+        <p>可以上传新的游戏截图。</p>
       </div>
     </main>
 
@@ -245,6 +240,14 @@
           <button class="close-button" type="button" data-close="friends-dialog" aria-label="关闭">×</button>
         </header>
 
+        <div class="friend-config-warning" id="friend-config-warning" role="alert" hidden>
+          <strong>好友登录尚未配置</strong>
+          <p>
+            请在 Cloudflare Pages 的“变量和机密”中添加加密 Secret
+            <code>FRIEND_ID_SECRET</code>（建议至少 32 位随机值），然后重新部署。
+          </p>
+        </div>
+        <p class="friend-manager-message" id="friend-manager-message" role="status" aria-live="polite" hidden></p>
         <form class="friend-create-form" id="friend-create-form">
           <input name="displayName" maxlength="40" placeholder="游戏名称" required />
           <input name="studentId" maxlength="80" placeholder="学号" required />

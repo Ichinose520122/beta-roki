@@ -6,7 +6,6 @@ const state = {
   query: "",
   category: "",
   filterState: "",
-  importFile: null,
   selectedIds: new Set(),
   editOriginal: null,
   categoryDrafts: [],
@@ -14,6 +13,7 @@ const state = {
   heroMode: "manual",
   recentLimit: 30,
   friends: [],
+  friendAuthConfigured: true,
   comments: [],
   commentTotal: 0,
   unreadCommentCount: 0,
@@ -62,12 +62,12 @@ const elements = {
   friendsDialog: document.querySelector("#friends-dialog"),
   friendCreateForm: document.querySelector("#friend-create-form"),
   friendManagerList: document.querySelector("#friend-manager-list"),
+  friendConfigWarning: document.querySelector("#friend-config-warning"),
+  friendManagerMessage: document.querySelector("#friend-manager-message"),
   commentsDialog: document.querySelector("#comments-dialog"),
   commentManagerList: document.querySelector("#comment-manager-list"),
   commentManagerSummary: document.querySelector("#comment-manager-summary"),
   markAllCommentsRead: document.querySelector("#mark-all-comments-read"),
-  importInput: document.querySelector("#import-input"),
-  importButton: document.querySelector("#import-button"),
   toast: document.querySelector("#toast"),
 };
 
@@ -348,6 +348,7 @@ function bindControls() {
   });
   elements.openSiteSettings.addEventListener("click", openSiteSettings);
   elements.openFriends.addEventListener("click", async () => {
+    showFriendManagerMessage("");
     elements.friendsDialog.showModal();
     await loadFriends();
   });
@@ -395,11 +396,6 @@ function bindControls() {
   elements.editForm.addEventListener("submit", submitEdit);
   elements.deleteButton.addEventListener("click", deleteCurrent);
 
-  elements.importInput.addEventListener("change", (event) => {
-    state.importFile = event.target.files[0] || null;
-    elements.importButton.disabled = !state.importFile;
-  });
-  elements.importButton.addEventListener("click", importLegacyGallery);
   elements.moveForm.elements.fromCategory.addEventListener("change", syncMoveTargets);
   elements.moveForm.addEventListener("submit", moveCategory);
   elements.categoryCreateForm.addEventListener("submit", createCategory);
@@ -711,14 +707,30 @@ async function loadFriends() {
   try {
     const data = await request("/api/admin/friends", { cache: "no-store" });
     state.friends = data.friends || [];
+    state.friendAuthConfigured = data.configured !== false;
     state.activeFriendCount = state.friends.filter((friend) => friend.active).length;
+    renderFriendConfiguration();
     renderAdminSignals();
     renderFriendManager();
   } catch (error) {
     elements.friendManagerList.replaceChildren(makeManagerMessage(error.message, true));
+    showFriendManagerMessage(error.message, true);
   } finally {
     elements.friendManagerList.setAttribute("aria-busy", "false");
   }
+}
+
+function renderFriendConfiguration() {
+  elements.friendConfigWarning.hidden = state.friendAuthConfigured;
+  [...elements.friendCreateForm.elements].forEach((control) => {
+    control.disabled = !state.friendAuthConfigured;
+  });
+}
+
+function showFriendManagerMessage(message, error = false) {
+  elements.friendManagerMessage.hidden = !message;
+  elements.friendManagerMessage.textContent = message;
+  elements.friendManagerMessage.classList.toggle("is-error", Boolean(message) && error);
 }
 
 function renderFriendManager() {
@@ -743,7 +755,10 @@ function createFriendManagerRow(friend) {
   const studentId = document.createElement("input");
   studentId.name = "studentId";
   studentId.maxLength = 80;
-  studentId.placeholder = "新学号（不修改请留空）";
+  studentId.placeholder = state.friendAuthConfigured
+    ? "新学号（不修改请留空）"
+    : "请先配置 FRIEND_ID_SECRET";
+  studentId.disabled = !state.friendAuthConfigured;
   studentId.setAttribute("aria-label", `${friend.displayName}的新学号`);
 
   const activeLabel = document.createElement("label");
@@ -798,11 +813,15 @@ async function createFriend(event) {
     });
     elements.friendCreateForm.reset();
     await loadFriends();
-    showToast("好友已添加，可以使用游戏名称和学号登录");
+    showFriendManagerMessage("好友已添加，可以使用游戏名称和学号登录");
   } catch (error) {
-    showToast(error.message, true);
+    if (error.message.includes("FRIEND_ID_SECRET")) {
+      state.friendAuthConfigured = false;
+      renderFriendConfiguration();
+    }
+    showFriendManagerMessage(error.message, true);
   } finally {
-    submit.disabled = false;
+    submit.disabled = !state.friendAuthConfigured;
   }
 }
 
@@ -822,9 +841,13 @@ async function saveFriend(event, friend) {
       }),
     });
     await loadFriends();
-    showToast("好友资料已保存");
+    showFriendManagerMessage("好友资料已保存");
   } catch (error) {
-    showToast(error.message, true);
+    if (error.message.includes("FRIEND_ID_SECRET")) {
+      state.friendAuthConfigured = false;
+      renderFriendConfiguration();
+    }
+    showFriendManagerMessage(error.message, true);
   } finally {
     submit.disabled = false;
   }
@@ -840,9 +863,9 @@ async function revokeFriendSessions(friend, button) {
       body: JSON.stringify({ revokeSessions: true }),
     });
     await loadFriends();
-    showToast("该好友的登录状态已全部清除");
+    showFriendManagerMessage("该好友的登录状态已全部清除");
   } catch (error) {
-    showToast(error.message, true);
+    showFriendManagerMessage(error.message, true);
     button.disabled = false;
   }
 }
@@ -853,9 +876,9 @@ async function deleteFriend(friend, button) {
   try {
     await request(`/api/admin/friends/${encodeURIComponent(friend.id)}`, { method: "DELETE" });
     await loadFriends();
-    showToast("好友已删除，历史留言仍然保留");
+    showFriendManagerMessage("好友已删除，历史留言仍然保留");
   } catch (error) {
-    showToast(error.message, true);
+    showFriendManagerMessage(error.message, true);
     button.disabled = false;
   }
 }
@@ -1285,27 +1308,6 @@ async function deleteCurrent() {
     showToast(error.message, true);
   } finally {
     elements.deleteButton.disabled = false;
-  }
-}
-
-async function importLegacyGallery() {
-  if (!state.importFile) return;
-  if (!confirm("导入会把旧索引登记到后台，但不会重复上传 R2 图片。继续吗？")) return;
-  elements.importButton.disabled = true;
-  try {
-    const raw = await state.importFile.text();
-    JSON.parse(raw);
-    const result = await request("/api/admin/import", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: raw,
-    });
-    await loadGallery();
-    showToast(`导入完成：新增 ${result.imported} 条，识别 ${result.accepted} 条`);
-  } catch (error) {
-    showToast(error.message, true);
-  } finally {
-    elements.importButton.disabled = false;
   }
 }
 

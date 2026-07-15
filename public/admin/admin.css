@@ -35,7 +35,6 @@ button { cursor: pointer; }
 a { color: inherit; text-decoration: none; }
 
 button,
-.file-action,
 .export-action,
 input,
 select,
@@ -47,9 +46,8 @@ textarea {
 }
 
 button,
-.file-action,
 .export-action { padding: 8px 12px; }
-button:hover:not(:disabled), .file-action:hover, .export-action:hover { border-color: #d58e9d; transform: translateY(-1px); }
+button:hover:not(:disabled), .export-action:hover { border-color: #d58e9d; transform: translateY(-1px); }
 button:disabled { cursor: default; opacity: 0.45; }
 .primary { color: #fff; background: linear-gradient(135deg, #df8297, #ca6e84); border-color: var(--accent); font-weight: 700; }
 .danger { color: var(--danger); border-color: rgba(255, 133, 143, 0.45); }
@@ -89,9 +87,7 @@ main { padding: 20px 0 60px; }
 .summary-bar { justify-content: space-between; min-height: 42px; color: var(--muted); font-size: 12px; }
 .summary-bar p { margin: 0; }
 .actions { margin-bottom: 12px; }
-.file-action,
 .export-action { position: relative; overflow: hidden; font-size: 13px; cursor: pointer; }
-.file-action input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 
 .action-count,
 .notification-count {
@@ -295,6 +291,43 @@ dialog::backdrop { background: rgba(76, 49, 58, 0.55); backdrop-filter: blur(5px
 .manager-panel header p,
 .manager-hint { color: var(--muted); font-size: 11px; }
 .manager-header-actions { display: flex; gap: 8px; align-items: center; }
+
+.friend-config-warning,
+.friend-manager-message {
+  padding: 10px 12px;
+  margin: 0 0 12px;
+  border: 1px solid #e0a7b2;
+  border-radius: 11px;
+  font-size: 11px;
+}
+
+.friend-config-warning {
+  color: #7c505a;
+  background: #fff0f1;
+}
+
+.friend-config-warning strong,
+.friend-config-warning p { margin: 0; }
+.friend-config-warning p { margin-top: 3px; line-height: 1.55; }
+.friend-config-warning code {
+  padding: 1px 4px;
+  color: #984e61;
+  background: rgba(255,255,255,.72);
+  border-radius: 4px;
+  font-size: 10px;
+}
+
+.friend-manager-message {
+  color: #55715d;
+  background: #f0f8f1;
+  border-color: #b8d4bd;
+}
+
+.friend-manager-message.is-error {
+  color: var(--danger);
+  background: #fff0f1;
+  border-color: #e0a7b2;
+}
 
 .friend-create-form {
   display: grid;

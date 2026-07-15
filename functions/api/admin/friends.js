@@ -1,5 +1,9 @@
 import { ensureSchema } from "../../_lib/db.js";
-import { hashStudentId, normalizeFriendName } from "../../_lib/friends.js";
+import {
+  friendAuthIsConfigured,
+  hashStudentId,
+  normalizeFriendName,
+} from "../../_lib/friends.js";
 import { apiError, cleanText, json, requireSameOrigin } from "../../_lib/http.js";
 
 function adminFriend(row) {
@@ -27,7 +31,11 @@ export async function onRequestGet(context) {
        FROM gallery_friends f
        ORDER BY f.is_active DESC, f.display_name COLLATE NOCASE ASC, f.created_at ASC`,
     ).bind(now).all();
-    return json({ ok: true, friends: (rows.results || []).map(adminFriend) }, {
+    return json({
+      ok: true,
+      configured: friendAuthIsConfigured(context.env),
+      friends: (rows.results || []).map(adminFriend),
+    }, {
       headers: { "Cache-Control": "no-store" },
     });
   } catch (error) {

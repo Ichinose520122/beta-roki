@@ -6,14 +6,21 @@
     <meta name="description" content="一ノ瀬林檎的小洛克冒险之旅" />
     <meta name="theme-color" content="#fff7f1" />
     <title>一ノ瀬林檎的小洛克冒险之旅</title>
-    <link rel="stylesheet" href="./style.css" />
-    <script src="./app.js?v=20260715-friend-comments" defer></script>
+    <link rel="stylesheet" href="./style.css?v=20260716-compact-hero" />
+    <script src="./app.js?v=20260716-compact-hero" defer></script>
   </head>
   <body>
     <header class="app-header">
       <div class="header-media" id="header-media" hidden>
-        <img class="header-cover-backdrop" id="header-cover-backdrop" src="" alt="" aria-hidden="true" />
-        <img class="header-cover" id="header-cover" src="" alt="" />
+        <img
+          class="header-cover"
+          id="header-cover"
+          src=""
+          alt=""
+          loading="eager"
+          fetchpriority="high"
+          decoding="async"
+        />
       </div>
       <div class="header-copy">
         <p class="eyebrow">RINGO'S ROCO ADVENTURE</p>
@@ -25,10 +32,6 @@
           <span aria-hidden="true">♡</span>
           <span id="friend-entry-label">好友登录</span>
         </button>
-        <a class="admin-entry" href="/admin/" aria-label="进入管理后台">
-          <span aria-hidden="true">✿</span>
-          管理后台
-        </a>
       </div>
     </header>
 
@@ -45,6 +48,10 @@
             aria-label="截图分类"
             aria-orientation="vertical"
           ></div>
+          <a class="sidebar-admin-entry" href="/admin/" aria-label="进入管理后台">
+            <span aria-hidden="true">✿</span>
+            管理后台
+          </a>
         </aside>
 
         <div class="gallery-content">

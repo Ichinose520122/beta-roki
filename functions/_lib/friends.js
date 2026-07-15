@@ -15,12 +15,17 @@ function bytesToBase64Url(bytes) {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
+export function friendAuthIsConfigured(env) {
+  return String(env.FRIEND_ID_SECRET || "").length >= 16;
+}
+
 function getAuthSecret(env) {
-  const secret = String(env.FRIEND_ID_SECRET || "");
-  if (secret.length < 16) {
-    throw new Error("好友登录尚未配置 FRIEND_ID_SECRET");
+  if (!friendAuthIsConfigured(env)) {
+    throw new Error(
+      "好友登录尚未配置：请在 Cloudflare Pages 的变量和机密中添加 FRIEND_ID_SECRET（建议至少 32 位随机值）",
+    );
   }
-  return secret;
+  return String(env.FRIEND_ID_SECRET);
 }
 
 async function hmac(value, env) {
